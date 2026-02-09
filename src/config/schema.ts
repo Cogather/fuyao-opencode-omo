@@ -362,6 +362,15 @@ export const SisyphusTasksConfigSchema = z.object({
 export const SisyphusConfigSchema = z.object({
   tasks: SisyphusTasksConfigSchema.optional(),
 })
+
+/** Platform agent: which platforms to pull agent list from. Connection/auth is implementation detail, not exposed. */
+export const PlatformAgentConfigSchema = z.object({
+  enabled: z.boolean().optional(),
+  /** Which platforms to fetch: fuyao, agentcenter, or both. */
+  platforms: z.array(z.enum(["fuyao", "agentcenter"])).optional(),
+})
+export type PlatformAgentConfig = z.infer<typeof PlatformAgentConfigSchema>
+
 export const OhMyOpenCodeConfigSchema = z.object({
   $schema: z.string().optional(),
   /** Enable new task system (default: false) */
@@ -389,6 +398,7 @@ export const OhMyOpenCodeConfigSchema = z.object({
   browser_automation_engine: BrowserAutomationConfigSchema.optional(),
   tmux: TmuxConfigSchema.optional(),
   sisyphus: SisyphusConfigSchema.optional(),
+  platform_agent: PlatformAgentConfigSchema.optional(),
 })
 
 export type OhMyOpenCodeConfig = z.infer<typeof OhMyOpenCodeConfigSchema>

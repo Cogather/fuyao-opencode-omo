@@ -34,6 +34,8 @@ import { PROMETHEUS_SYSTEM_PROMPT, PROMETHEUS_PERMISSION } from "../agents/prome
 import { DEFAULT_CATEGORIES } from "../tools/delegate-task/constants";
 import type { ModelCacheState } from "../plugin-state";
 import type { CategoryConfig } from "../config/schema";
+import { getPlatformAgentList, platformAppsToAgentRecord } from "../features/platform-agent";
+import type { PlatformType } from "../features/platform-agent";
 
 export interface ConfigHandlerDeps {
   ctx: { directory: string; client?: any };
@@ -68,6 +70,24 @@ function reorderAgentsByPriority(agents: Record<string, unknown>): Record<string
   }
 
   return ordered;
+}
+
+async function loadPlatformAgents(
+  pluginConfig: OhMyOpenCodeConfig
+): Promise<Record<string, unknown>> {
+  const pa = pluginConfig.platform_agent;
+  if (!pa?.enabled || !pa.platforms?.length) return {};
+  const out: Record<string, unknown> = {};
+  for (const platform of pa.platforms as PlatformType[]) {
+    try {
+      const apps = await getPlatformAgentList(platform);
+      const record = platformAppsToAgentRecord(apps, platform);
+      Object.assign(out, record);
+    } catch (err) {
+      log(`Platform agent list failed for ${platform}`, { error: err });
+    }
+  }
+  return out;
 }
 
 export function createConfigHandler(deps: ConfigHandlerDeps) {
@@ -369,6 +389,8 @@ export function createConfigHandler(deps: ConfigHandlerDeps) {
           }
         : undefined;
 
+      const platformAgentRecord = await loadPlatformAgents(pluginConfig);
+
       config.agent = {
         ...agentConfig,
         ...Object.fromEntries(
@@ -377,16 +399,19 @@ export function createConfigHandler(deps: ConfigHandlerDeps) {
         ...userAgents,
         ...projectAgents,
         ...pluginAgents,
+        ...platformAgentRecord,
         ...filteredConfigAgents,
         build: { ...migratedBuild, mode: "subagent", hidden: true },
         ...(planDemoteConfig ? { plan: planDemoteConfig } : {}),
       };
     } else {
+      const platformAgentRecord = await loadPlatformAgents(pluginConfig);
       config.agent = {
         ...builtinAgents,
         ...userAgents,
         ...projectAgents,
         ...pluginAgents,
+        ...platformAgentRecord,
         ...configAgent,
       };
     }

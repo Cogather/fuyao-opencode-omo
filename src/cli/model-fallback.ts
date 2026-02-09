@@ -219,6 +219,7 @@ export function generateModelConfig(config: InstallConfig): GeneratedOmoConfig {
     $schema: SCHEMA_URL,
     agents,
     categories,
+    platform_agent: { enabled: true, platforms: ["fuyao", "agentcenter"] },
   }
 }
 
