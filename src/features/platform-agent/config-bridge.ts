@@ -1,5 +1,5 @@
 /**
- * Maps PlatformAgentApp to OpenCode agent config. Agent key uses platform prefix to avoid clashes.
+ * Maps PlatformAgentApp to OpenCode agent config. Agent key = "platform:name" to distinguish platforms (e.g. fuyao:CodeHelper).
  */
 
 import type { PlatformAgentApp, PlatformType } from "./types"
@@ -8,8 +8,8 @@ import type { PlatformAgentApp, PlatformType } from "./types"
 export type OpenCodeAgentEntry = Record<string, unknown>
 
 /**
- * Convert one platform app to OpenCode agent entry. Key will be "fuyao:Name" or "agentcenter:Name".
- * Uses app.prompt as system prompt (from SDK / platform, or mock).
+ * Convert one platform app to OpenCode agent entry. Config key is "platform:name" (e.g. fuyao:CodeHelper, agentcenter:Reviewer).
+ * entry.name must equal the config key so OpenCode lookups (e.g. agent.name) resolve; description stays human-readable.
  */
 export function platformAppToOpenCodeAgent(
   app: PlatformAgentApp,
@@ -17,18 +17,21 @@ export function platformAppToOpenCodeAgent(
 ): OpenCodeAgentEntry {
   const key = `${platform}:${app.name}`
   const entry: OpenCodeAgentEntry = {
-    name: app.name,
+    name: key,
     prompt: app.prompt,
     description: app.description ?? app.name,
   }
   if (app.model) entry.model = app.model
   if (app.permission && Object.keys(app.permission).length > 0) entry.permission = app.permission
   if (app.skills?.length) entry.skills = app.skills
+  if (app.subagents?.length) entry.subagents = app.subagents
+  if (app.mcps?.length) entry.mcps = app.mcps
+  if (app.mode) entry.mode = app.mode
   return entry
 }
 
 /**
- * Build config.agent-style record from platform apps: keys are "platform:AppName", values are OpenCode agent entries.
+ * Build config.agent-style record from platform apps: keys are "platform:name" (e.g. fuyao:CodeHelper, agentcenter:Reviewer), name 与 mock-data 的 name 字段一致.
  */
 export function platformAppsToAgentRecord(
   apps: PlatformAgentApp[],

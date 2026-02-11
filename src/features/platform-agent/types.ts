@@ -16,6 +16,8 @@ export interface PlatformAgentApp {
   skills?: string[]
   mcps?: string[]
   subagents?: string[]
+  /** OpenCode agent mode: subagent 仅作为子 agent 被引用，不单独出现在主列表 */
+  mode?: "subagent" | "primary" | "all"
   description?: string
 }
 

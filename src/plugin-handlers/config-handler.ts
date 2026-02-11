@@ -8,10 +8,6 @@ import {
 } from "../features/claude-code-command-loader";
 import { loadBuiltinCommands } from "../features/builtin-commands";
 import {
-  loadUserSkills,
-  loadProjectSkills,
-  loadOpencodeGlobalSkills,
-  loadOpencodeProjectSkills,
   discoverUserClaudeSkills,
   discoverProjectClaudeSkills,
   discoverOpencodeGlobalSkills,
@@ -231,7 +227,6 @@ export function createConfigHandler(deps: ConfigHandlerDeps) {
     const configAgent = config.agent as AgentConfig | undefined;
 
     if (isSisyphusEnabled && builtinAgents.sisyphus) {
-      (config as { default_agent?: string }).default_agent = "sisyphus";
 
       const agentConfig: Record<string, unknown> = {
         sisyphus: builtinAgents.sisyphus,
@@ -358,15 +353,13 @@ export function createConfigHandler(deps: ConfigHandlerDeps) {
         }
       }
 
-    const filteredConfigAgents = configAgent
+    // User overrides from config file (pluginConfig.agents). Includes platform agent keys "platform:name" (e.g. fuyao:CodeHelper) for manual skills/mcps/subagents/version.
+    const userAgentOverrides = pluginConfig.agents
       ? Object.fromEntries(
-          Object.entries(configAgent)
+          Object.entries(pluginConfig.agents)
             .filter(([key]) => {
               if (key === "build") return false;
               if (key === "plan" && replacePlan) return false;
-              // Filter out agents that fuyao-opencode provides to prevent
-              // OpenCode defaults from overwriting user config in fuyao-opencode.json
-              // See: https://github.com/code-yeongyu/fuyao-opencode/issues/472
               if (key in builtinAgents) return false;
               return true;
             })
@@ -377,47 +370,80 @@ export function createConfigHandler(deps: ConfigHandlerDeps) {
         )
       : {};
 
-      const migratedBuild = configAgent?.build
-        ? migrateAgentConfig(configAgent.build as Record<string, unknown>)
-        : {};
+    const migratedBuild = configAgent?.build
+      ? migrateAgentConfig(configAgent.build as Record<string, unknown>)
+      : {};
 
-      const planDemoteConfig = replacePlan && agentConfig["prometheus"]
-        ? { 
-            ...agentConfig["prometheus"],
-            name: "plan", 
-            mode: "subagent" as const 
-          }
-        : undefined;
+    const planDemoteConfig = replacePlan && agentConfig["prometheus"]
+      ? {
+          ...agentConfig["prometheus"],
+          name: "plan",
+          mode: "subagent" as const,
+        }
+      : undefined;
 
-      const platformAgentRecord = await loadPlatformAgents(pluginConfig);
+    const platformAgentRecord = await loadPlatformAgents(pluginConfig);
+    // Manual config overrides runtime: for platform keys merge platform base + user override; other keys are user-only.
+    const mergedPlatformAndUser: Record<string, unknown> = { ...platformAgentRecord };
+    for (const [key, value] of Object.entries(userAgentOverrides)) {
+      mergedPlatformAndUser[key] =
+        key in platformAgentRecord
+          ? { ...(platformAgentRecord[key] as Record<string, unknown>), ...(value as Record<string, unknown>) }
+          : value;
+    }
 
-      config.agent = {
-        ...agentConfig,
-        ...Object.fromEntries(
-          Object.entries(builtinAgents).filter(([k]) => k !== "sisyphus")
-        ),
-        ...userAgents,
-        ...projectAgents,
-        ...pluginAgents,
-        ...platformAgentRecord,
-        ...filteredConfigAgents,
-        build: { ...migratedBuild, mode: "subagent", hidden: true },
-        ...(planDemoteConfig ? { plan: planDemoteConfig } : {}),
-      };
+    config.agent = {
+      ...agentConfig,
+      ...Object.fromEntries(
+        Object.entries(builtinAgents).filter(([k]) => k !== "sisyphus")
+      ),
+      ...userAgents,
+      ...projectAgents,
+      ...pluginAgents,
+      ...mergedPlatformAndUser,
+      build: { ...migratedBuild, mode: "subagent", hidden: true },
+      ...(planDemoteConfig ? { plan: planDemoteConfig } : {}),
+    };
     } else {
       const platformAgentRecord = await loadPlatformAgents(pluginConfig);
+      const userAgentOverridesElse = pluginConfig.agents
+        ? Object.fromEntries(
+            Object.entries(pluginConfig.agents).map(([key, value]) => [
+              key,
+              value ? migrateAgentConfig(value as Record<string, unknown>) : value,
+            ])
+          )
+        : {};
+      const mergedPlatformAndUserElse: Record<string, unknown> = { ...platformAgentRecord };
+      for (const [key, value] of Object.entries(userAgentOverridesElse)) {
+        mergedPlatformAndUserElse[key] =
+          key in platformAgentRecord
+            ? { ...(platformAgentRecord[key] as Record<string, unknown>), ...(value as Record<string, unknown>) }
+            : value;
+      }
+      // Builtin overrides from config (e.g. oracle: { model: "..." }) still apply
+      const builtinOverridesFromConfig = Object.fromEntries(
+        Object.entries(userAgentOverridesElse).filter(([key]) => key in builtinAgents)
+      );
       config.agent = {
         ...builtinAgents,
         ...userAgents,
         ...projectAgents,
         ...pluginAgents,
-        ...platformAgentRecord,
-        ...configAgent,
+        ...mergedPlatformAndUserElse,
+        ...builtinOverridesFromConfig,
       };
     }
 
     if (config.agent) {
       config.agent = reorderAgentsByPriority(config.agent as Record<string, unknown>);
+    }
+
+    // Persisted default agent: from config file so next launch uses it (e.g. after user switched to fuyao:CodeHelper)
+    const defaultAgent =
+      pluginConfig.default_agent ?? (isSisyphusEnabled && builtinAgents.sisyphus ? "sisyphus" : undefined);
+    if (defaultAgent !== undefined) {
+      (config as { default_agent?: string }).default_agent = defaultAgent;
     }
 
     const agentResult = config.agent as AgentConfig;
@@ -485,43 +511,38 @@ export function createConfigHandler(deps: ConfigHandlerDeps) {
     const builtinCommands = loadBuiltinCommands(pluginConfig.disabled_commands);
     const systemCommands = (config.command as Record<string, unknown>) ?? {};
 
-    // Parallel loading of all commands and skills for faster startup
+    // Parallel loading of commands (directory skills are not merged into config.command; use /skills to list and use them)
     const includeClaudeCommands = pluginConfig.claude_code?.commands ?? true;
-    const includeClaudeSkills = pluginConfig.claude_code?.skills ?? true;
 
     const [
       userCommands,
       projectCommands,
       opencodeGlobalCommands,
       opencodeProjectCommands,
-      userSkills,
-      projectSkills,
-      opencodeGlobalSkills,
-      opencodeProjectSkills,
     ] = await Promise.all([
       includeClaudeCommands ? loadUserCommands() : Promise.resolve({}),
       includeClaudeCommands ? loadProjectCommands() : Promise.resolve({}),
       loadOpencodeGlobalCommands(),
       loadOpencodeProjectCommands(),
-      includeClaudeSkills ? loadUserSkills() : Promise.resolve({}),
-      includeClaudeSkills ? loadProjectSkills() : Promise.resolve({}),
-      loadOpencodeGlobalSkills(),
-      loadOpencodeProjectSkills(),
     ]);
 
-    config.command = {
+    // Do NOT merge directory skills (userSkills, projectSkills, opencodeGlobalSkills, opencodeProjectSkills)
+    // into config.command, so they do not appear as separate "/" entries (e.g. /playwright, /git-master).
+    // /skills is provided by the host (OpenCode); OMO does not register its own /skills to avoid duplicate.
+    const mergedCommand = {
       ...builtinCommands,
       ...userCommands,
-      ...userSkills,
       ...opencodeGlobalCommands,
-      ...opencodeGlobalSkills,
       ...systemCommands,
       ...projectCommands,
-      ...projectSkills,
       ...opencodeProjectCommands,
-      ...opencodeProjectSkills,
       ...pluginComponents.commands,
       ...pluginComponents.skills,
     };
+    const merged = mergedCommand as Record<string, unknown>;
+    const rest = Object.fromEntries(
+      Object.entries(merged).filter(([k]) => k.toLowerCase() !== "skills")
+    );
+    config.command = rest;
   };
 }

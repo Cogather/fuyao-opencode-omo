@@ -49,6 +49,8 @@ import {
   discoverOpencodeGlobalSkills,
   discoverOpencodeProjectSkills,
   mergeSkills,
+  getAvailableSkillsForAgent,
+  resolveSkillAvailabilityConfig,
 } from "./features/opencode-skill-loader";
 import { createBuiltinSkills } from "./features/builtin-skills";
 import { getSystemMcpServerNames } from "./features/claude-code-mcp-loader";
@@ -65,6 +67,7 @@ import {
   createBackgroundTools,
   createLookAt,
   createSkillTool,
+  createListAvailableSkillsTool,
   createSkillMcpTool,
   createSlashcommandTool,
   discoverCommandsSync,
@@ -81,7 +84,7 @@ import { initTaskToastManager } from "./features/task-toast-manager";
 import { TmuxSessionManager } from "./features/tmux-subagent";
 import { clearBoulderState } from "./features/boulder-state";
 import { type HookName } from "./config";
-import { log, detectExternalNotificationPlugin, getNotificationConflictWarning, resetMessageCursor, hasConnectedProvidersCache, getOpenCodeVersion, isOpenCodeVersionAtLeast, OPENCODE_NATIVE_AGENTS_INJECTION_VERSION } from "./shared";
+import { log, detectExternalNotificationPlugin, getNotificationConflictWarning, resetMessageCursor, hasConnectedProvidersCache, getOpenCodeVersion, isOpenCodeVersionAtLeast, OPENCODE_NATIVE_AGENTS_INJECTION_VERSION, persistDefaultAgent } from "./shared";
 import { loadPluginConfig } from "./plugin-config";
 import { createModelCacheState } from "./plugin-state";
 import { createConfigHandler } from "./plugin-handlers";
@@ -392,12 +395,31 @@ const OhMyOpenCodePlugin: Plugin = async (ctx) => {
   );
   const skillMcpManager = new SkillMcpManager();
   const getSessionIDForMcp = () => getMainSessionID() || "";
+  const skillAvailability = resolveSkillAvailabilityConfig(pluginConfig.skill_availability);
+  const getAvailableSkills = (agent?: string) => {
+    const raw =
+      agent && (pluginConfig.agents as Record<string, { skills?: unknown }>)?.[agent]?.skills;
+    const agentSkillNames = Array.isArray(raw)
+      ? raw.filter((s): s is string => typeof s === "string")
+      : [];
+    return Promise.resolve(
+      getAvailableSkillsForAgent({
+        agentSkillNames,
+        mergedSkills,
+        includeBuiltinInAvailable: skillAvailability.includeBuiltinInAvailable,
+        includeDirectoryInAvailable: skillAvailability.includeDirectoryInAvailable,
+      })
+    );
+  };
   const skillTool = createSkillTool({
     skills: mergedSkills,
+    getAvailableSkills,
+    skillAvailability,
     mcpManager: skillMcpManager,
     getSessionID: getSessionIDForMcp,
     gitMasterConfig: pluginConfig.git_master,
   });
+  const listAvailableSkillsTool = createListAvailableSkillsTool({ getAvailableSkills });
   const skillMcpTool = createSkillMcpTool({
     manager: skillMcpManager,
     getLoadedSkills: () => mergedSkills,
@@ -431,6 +453,7 @@ const OhMyOpenCodePlugin: Plugin = async (ctx) => {
       ...(lookAt ? { look_at: lookAt } : {}),
       delegate_task: delegateTask,
       skill: skillTool,
+      list_available_skills: listAvailableSkillsTool,
       skill_mcp: skillMcpTool,
       slashcommand: slashcommandTool,
       interactive_bash,
@@ -609,6 +632,9 @@ const OhMyOpenCodePlugin: Plugin = async (ctx) => {
         const role = info?.role as string | undefined;
         if (sessionID && agent && role === "user") {
           updateSessionAgent(sessionID, agent);
+          if (sessionID === getMainSessionID()) {
+            persistDefaultAgent(agent);
+          }
         }
       }
 

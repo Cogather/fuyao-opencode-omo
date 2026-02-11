@@ -5,7 +5,7 @@ import { parseFrontmatter } from "../../shared/frontmatter"
 import { sanitizeModelField } from "../../shared/model-sanitizer"
 import { resolveSymlinkAsync, isMarkdownFile } from "../../shared/file-utils"
 import { getClaudeConfigDir } from "../../shared"
-import { getOpenCodeConfigDir } from "../../shared/opencode-config-dir"
+import { getOpenCodeConfigDir, getMarketSkillsDir } from "../../shared/opencode-config-dir"
 import type { CommandDefinition } from "../claude-code-command-loader/types"
 import type { SkillScope, SkillMetadata, LoadedSkill, LazyContentLoader } from "./types"
 import type { SkillMcpConfig } from "../skill-mcp-manager/types"
@@ -259,7 +259,10 @@ export async function discoverProjectClaudeSkills(): Promise<LoadedSkill[]> {
 export async function discoverOpencodeGlobalSkills(): Promise<LoadedSkill[]> {
   const configDir = getOpenCodeConfigDir({ binary: "opencode" })
   const opencodeSkillsDir = join(configDir, "skills")
-  return loadSkillsFromDir(opencodeSkillsDir, "opencode")
+  const baseSkills = await loadSkillsFromDir(opencodeSkillsDir, "opencode")
+  const marketDir = getMarketSkillsDir()
+  const marketSkills = await loadSkillsFromDir(marketDir, "opencode")
+  return [...baseSkills, ...marketSkills]
 }
 
 export async function discoverOpencodeProjectSkills(): Promise<LoadedSkill[]> {

@@ -134,24 +134,31 @@ export const AgentOverrideConfigSchema = z.object({
   textVerbosity: z.enum(["low", "medium", "high"]).optional(),
   /** Provider-specific options. Passed directly to OpenCode SDK. */
   providerOptions: z.record(z.string(), z.unknown()).optional(),
+  /** Subagent names this agent can delegate to (platform agents / delegate_task). */
+  subagents: z.array(z.string()).optional(),
+  /** MCP names to enable for this agent (platform agents). */
+  mcps: z.array(z.string()).optional(),
 })
 
-export const AgentOverridesSchema = z.object({
-  build: AgentOverrideConfigSchema.optional(),
-  plan: AgentOverrideConfigSchema.optional(),
-  sisyphus: AgentOverrideConfigSchema.optional(),
-  hephaestus: AgentOverrideConfigSchema.optional(),
-  "sisyphus-junior": AgentOverrideConfigSchema.optional(),
-  "OpenCode-Builder": AgentOverrideConfigSchema.optional(),
-  prometheus: AgentOverrideConfigSchema.optional(),
-  metis: AgentOverrideConfigSchema.optional(),
-  momus: AgentOverrideConfigSchema.optional(),
-  oracle: AgentOverrideConfigSchema.optional(),
-  librarian: AgentOverrideConfigSchema.optional(),
-  explore: AgentOverrideConfigSchema.optional(),
-  "multimodal-looker": AgentOverrideConfigSchema.optional(),
-  atlas: AgentOverrideConfigSchema.optional(),
-})
+export const AgentOverridesSchema = z
+  .object({
+    build: AgentOverrideConfigSchema.optional(),
+    plan: AgentOverrideConfigSchema.optional(),
+    sisyphus: AgentOverrideConfigSchema.optional(),
+    hephaestus: AgentOverrideConfigSchema.optional(),
+    "sisyphus-junior": AgentOverrideConfigSchema.optional(),
+    "OpenCode-Builder": AgentOverrideConfigSchema.optional(),
+    prometheus: AgentOverrideConfigSchema.optional(),
+    metis: AgentOverrideConfigSchema.optional(),
+    momus: AgentOverrideConfigSchema.optional(),
+    oracle: AgentOverrideConfigSchema.optional(),
+    librarian: AgentOverrideConfigSchema.optional(),
+    explore: AgentOverrideConfigSchema.optional(),
+    "multimodal-looker": AgentOverrideConfigSchema.optional(),
+    atlas: AgentOverrideConfigSchema.optional(),
+  })
+  /** Allow platform agent keys "platform:name" (e.g. "fuyao:CodeHelper") for manual overrides; manual config overrides runtime-fetched. */
+  .catchall(AgentOverrideConfigSchema.optional())
 
 export const ClaudeCodeConfigSchema = z.object({
   mcp: z.boolean().optional(),
@@ -363,6 +370,20 @@ export const SisyphusConfigSchema = z.object({
   tasks: SisyphusTasksConfigSchema.optional(),
 })
 
+/**
+ * Control which skills are listed as "available" when the agent is asked (e.g. "what skills do I have").
+ * - include_builtin_in_available: when true, all builtin skills are in the available list; when false, only those in agent.skills.
+ * - include_directory_in_available: when true, all skills from directories (user/project/opencode global) are in the list; when false, only those in agent.skills.
+ * When both are false, only agent.skills (by name) are available (on-demand loading).
+ */
+export const SkillAvailabilityConfigSchema = z.object({
+  /** Include all builtin skills in available list when true; when false, only agent.skills (default: true). */
+  include_builtin_in_available: z.boolean().optional(),
+  /** Include all directory-read skills in available list when true; when false, only agent.skills (default: true). */
+  include_directory_in_available: z.boolean().optional(),
+})
+export type SkillAvailabilityConfig = z.infer<typeof SkillAvailabilityConfigSchema>
+
 /** Platform agent: which platforms to pull agent list from. Connection/auth is implementation detail, not exposed. */
 export const PlatformAgentConfigSchema = z.object({
   enabled: z.boolean().optional(),
@@ -399,6 +420,10 @@ export const OhMyOpenCodeConfigSchema = z.object({
   tmux: TmuxConfigSchema.optional(),
   sisyphus: SisyphusConfigSchema.optional(),
   platform_agent: PlatformAgentConfigSchema.optional(),
+  /** Default agent name when OpenCode starts (e.g. "sisyphus", "fuyao:CodeHelper"). Persisted so next launch uses it. */
+  default_agent: z.string().optional(),
+  /** Control which skills are shown as available per agent (builtin / directory vs only agent.skills). */
+  skill_availability: SkillAvailabilityConfigSchema.optional(),
 })
 
 export type OhMyOpenCodeConfig = z.infer<typeof OhMyOpenCodeConfigSchema>

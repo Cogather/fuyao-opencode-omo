@@ -144,6 +144,12 @@ export function generateModelConfig(config: InstallConfig): GeneratedOmoConfig {
       categories: Object.fromEntries(
         Object.keys(CATEGORY_MODEL_REQUIREMENTS).map((cat) => [cat, { model: ULTIMATE_FALLBACK }])
       ),
+      platform_agent: { enabled: true, platforms: ["fuyao", "agentcenter"] },
+      default_agent: "sisyphus",
+      skill_availability: {
+        include_builtin_in_available: true,
+        include_directory_in_available: true,
+      },
     }
   }
 
@@ -220,6 +226,11 @@ export function generateModelConfig(config: InstallConfig): GeneratedOmoConfig {
     agents,
     categories,
     platform_agent: { enabled: true, platforms: ["fuyao", "agentcenter"] },
+    default_agent: "sisyphus",
+    skill_availability: {
+      include_builtin_in_available: true,
+      include_directory_in_available: true,
+    },
   }
 }
 

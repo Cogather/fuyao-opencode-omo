@@ -339,7 +339,8 @@ export function writeOmoConfig(installConfig: InstallConfig): ConfigMergeResult 
           return { success: true, configPath: omoConfigPath }
         }
 
-        const merged = deepMerge(existing, newConfig)
+        // Incremental: keep existing values, only add defaults for missing keys (newConfig as base, existing overrides)
+        const merged = deepMerge(newConfig, existing)
         writeFileSync(omoConfigPath, JSON.stringify(merged, null, 2) + "\n")
       } catch (parseErr) {
         if (parseErr instanceof SyntaxError) {

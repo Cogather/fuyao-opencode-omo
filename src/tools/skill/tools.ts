@@ -1,6 +1,6 @@
 import { dirname } from "node:path"
 import { tool, type ToolDefinition } from "@opencode-ai/plugin"
-import { TOOL_DESCRIPTION_NO_SKILLS, TOOL_DESCRIPTION_PREFIX } from "./constants"
+import { TOOL_DESCRIPTION_NO_SKILLS, TOOL_DESCRIPTION_PREFIX, TOOL_DESCRIPTION_AVAILABILITY_RESTRICTED } from "./constants"
 import type { SkillArgs, SkillInfo, SkillLoadOptions } from "./types"
 import type { LoadedSkill } from "../../features/opencode-skill-loader"
 import { getAllSkills, extractSkillTemplate } from "../../features/opencode-skill-loader/skill-content"
@@ -130,6 +130,11 @@ export function createSkillTool(options: SkillLoadOptions = {}): ToolDefinition 
   let cachedSkills: LoadedSkill[] | null = null
   let cachedDescription: string | null = null
 
+  const availabilityRestricted =
+    options.skillAvailability &&
+    (options.skillAvailability.includeBuiltinInAvailable === false ||
+      options.skillAvailability.includeDirectoryInAvailable === false)
+
   const getSkills = async (): Promise<LoadedSkill[]> => {
     if (options.skills) return options.skills
     if (cachedSkills) return cachedSkills
@@ -139,6 +144,10 @@ export function createSkillTool(options: SkillLoadOptions = {}): ToolDefinition 
 
   const getDescription = async (): Promise<string> => {
     if (cachedDescription) return cachedDescription
+    if (availabilityRestricted) {
+      cachedDescription = TOOL_DESCRIPTION_AVAILABILITY_RESTRICTED
+      return cachedDescription
+    }
     const skills = await getSkills()
     const skillInfos = skills.map(loadedSkillToInfo)
     cachedDescription = skillInfos.length === 0
@@ -147,7 +156,9 @@ export function createSkillTool(options: SkillLoadOptions = {}): ToolDefinition 
     return cachedDescription
   }
 
-  if (options.skills) {
+  if (availabilityRestricted) {
+    cachedDescription = TOOL_DESCRIPTION_AVAILABILITY_RESTRICTED
+  } else if (options.skills) {
     const skillInfos = options.skills.map(loadedSkillToInfo)
     cachedDescription = skillInfos.length === 0
       ? TOOL_DESCRIPTION_NO_SKILLS
@@ -164,12 +175,18 @@ export function createSkillTool(options: SkillLoadOptions = {}): ToolDefinition 
       name: tool.schema.string().describe("The skill identifier from available_skills (e.g., 'code-review')"),
     },
     async execute(args: SkillArgs, ctx?: { agent?: string }) {
-      const skills = await getSkills()
+      const skills = options.getAvailableSkills
+        ? await options.getAvailableSkills(ctx?.agent)
+        : await getSkills()
       const skill = skills.find(s => s.name === args.name)
 
       if (!skill) {
         const available = skills.map(s => s.name).join(", ")
-        throw new Error(`Skill "${args.name}" not found. Available skills: ${available || "none"}`)
+        const msg =
+          options.getAvailableSkills && ctx?.agent
+            ? `Skill "${args.name}" is not available for your agent. Available skills for your agent: ${available || "none"}`
+            : `Skill "${args.name}" not found. Available skills: ${available || "none"}`
+        throw new Error(msg)
       }
 
       if (skill.definition.agent && (!ctx?.agent || skill.definition.agent !== ctx.agent)) {
@@ -209,3 +226,32 @@ export function createSkillTool(options: SkillLoadOptions = {}): ToolDefinition 
 }
 
 export const skill: ToolDefinition = createSkillTool()
+
+/** Options for the list_available_skills tool (used when skill_availability restricts per-agent). */
+export interface ListAvailableSkillsOptions {
+  getAvailableSkills: (agent?: string) => Promise<LoadedSkill[]>
+}
+
+/**
+ * Tool that returns the list of skills available to the current agent.
+ * Use when skill_availability is restricted so the model can answer "what skills do I have".
+ */
+export function createListAvailableSkillsTool(
+  options: ListAvailableSkillsOptions
+): ToolDefinition {
+  return tool({
+    description:
+      "List the skills available to your current agent. Call this when the user asks what skills or capabilities you have.",
+    args: {},
+    async execute(_args: Record<string, unknown>, ctx?: { agent?: string }) {
+      const skills = await options.getAvailableSkills(ctx?.agent)
+      if (skills.length === 0) {
+        return "No skills are available for your current agent. Configure agent.skills or enable skill_availability (include_builtin_in_available / include_directory_in_available) in config."
+      }
+      const lines = skills.map(
+        (s) => `- **${s.name}**: ${s.definition.description || "(no description)"}`
+      )
+      return `Available skills for your agent (${skills.length}):\n\n${lines.join("\n")}`
+    },
+  })
+}

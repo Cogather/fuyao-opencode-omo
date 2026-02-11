@@ -110,6 +110,12 @@ export function getOpenCodeConfigPaths(options: OpenCodeConfigDirOptions): OpenC
   }
 }
 
+/** Directory where skill-market downloads are stored (configDir/skills/market). */
+export function getMarketSkillsDir(): string {
+  const configDir = getOpenCodeConfigDir({ binary: "opencode" })
+  return join(configDir, "skills", "market")
+}
+
 export function detectExistingConfigDir(binary: OpenCodeBinaryType, version?: string | null): string | null {
   const locations: string[] = []
 

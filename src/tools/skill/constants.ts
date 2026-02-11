@@ -6,3 +6,6 @@ export const TOOL_DESCRIPTION_PREFIX = `Load a skill to get detailed instruction
 
 Skills provide specialized knowledge and step-by-step guidance.
 Use this when a task matches an available skill's description.`
+
+/** When skill_availability restricts list per agent, we don't list all skills in description; use list_available_skills to discover. */
+export const TOOL_DESCRIPTION_AVAILABILITY_RESTRICTED = `Load a skill by name. Available skills depend on your current agent's configuration (agent's \`skills\` array). Use the \`list_available_skills\` tool to see which skills you can use, then call this tool with \`name=<skill_name>\`.` 
