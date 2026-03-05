@@ -13,11 +13,42 @@ import {
   executeUnstableAgentTask,
   executeBackgroundTask,
   executeSyncTask,
+  getCallableSubagentNames,
 } from "./executor"
+import type { OpencodeClient } from "./types"
+import type { ResolvedSubagentAvailability } from "./subagent-availability"
 
 export { resolveCategoryConfig } from "./categories"
+export { resolveSubagentAvailabilityConfig } from "./subagent-availability"
 export type { SyncSessionCreatedEvent, DelegateTaskToolOptions, BuildSystemContentInput } from "./types"
 export { buildSystemContent } from "./prompt-builder"
+
+/**
+ * Tool that returns the subagents the current agent can delegate to.
+ * Respects subagent_availability: builtin/directory vs only configured; or full list when allowFullList.
+ */
+export function createListAvailableSubagentsTool(options: {
+  client: OpencodeClient
+  /** Resolved subagent_availability (builtin/directory vs only configured). */
+  subagentAvailability?: ResolvedSubagentAvailability
+}): ToolDefinition {
+  return tool({
+    description:
+      "List the subagents your current agent can delegate to via delegate_task (subagent_type). Respects subagent_availability: only configured, or configured + builtin/directory. Call when the user asks what subagents are available or which agents you can delegate to.",
+    args: {},
+    async execute(_args: Record<string, unknown>, toolContext?: unknown) {
+      const ctx = toolContext as { agent?: string } | undefined
+      const currentAgent = ctx?.agent
+      const names = await getCallableSubagentNames(options.client, currentAgent, {
+        subagentAvailability: options.subagentAvailability,
+      })
+      if (names.length === 0) {
+        return "No subagents are available for your current agent. Use category with delegate_task for category-based tasks, or configure subagents for platform agents."
+      }
+      return `Subagents available for your agent (${names.length}):\n\n${names.map((n) => `- ${n}`).join("\n")}\n\nUse delegate_task with subagent_type="<name>" to delegate.`
+    },
+  })
+}
 
 export function createDelegateTask(options: DelegateTaskToolOptions): ToolDefinition {
   const { userCategories } = options

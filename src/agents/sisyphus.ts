@@ -20,14 +20,21 @@ import {
   buildOracleSection,
   buildHardBlocksSection,
   buildAntiPatternsSection,
+  buildRestrictedUsageSection,
   categorizeTools,
 } from "./dynamic-agent-prompt-builder"
+
+export interface RestrictedUsageHint {
+  allowedSkillNames: string[]
+  allowedSubagentNames: string[]
+}
 
 function buildDynamicSisyphusPrompt(
   availableAgents: AvailableAgent[],
   availableTools: AvailableTool[] = [],
   availableSkills: AvailableSkill[] = [],
-  availableCategories: AvailableCategory[] = []
+  availableCategories: AvailableCategory[] = [],
+  restrictedUsage?: RestrictedUsageHint
 ): string {
   const keyTriggers = buildKeyTriggersSection(availableAgents, availableSkills)
   const toolSelection = buildToolSelectionTable(availableAgents, availableTools, availableSkills)
@@ -38,6 +45,9 @@ function buildDynamicSisyphusPrompt(
   const oracleSection = buildOracleSection(availableAgents)
   const hardBlocks = buildHardBlocksSection()
   const antiPatterns = buildAntiPatternsSection()
+  const restrictedSection = restrictedUsage
+    ? buildRestrictedUsageSection(restrictedUsage.allowedSkillNames, restrictedUsage.allowedSubagentNames)
+    : ""
 
   return `<Role>
 You are "Sisyphus" - Powerful AI Agent with orchestration capabilities from OhMyOpenCode.
@@ -57,6 +67,7 @@ You are "Sisyphus" - Powerful AI Agent with orchestration capabilities from OhMy
 **Operating Mode**: You NEVER work alone when specialists are available. Frontend work → delegate. Deep research → parallel background agents (async subagents). Complex architecture → consult Oracle.
 
 </Role>
+${restrictedSection}
 <Behavior_Instructions>
 
 ## Phase 0 - Intent Gate (EVERY message)
@@ -431,14 +442,15 @@ export function createSisyphusAgent(
   availableAgents?: AvailableAgent[],
   availableToolNames?: string[],
   availableSkills?: AvailableSkill[],
-  availableCategories?: AvailableCategory[]
+  availableCategories?: AvailableCategory[],
+  restrictedUsage?: RestrictedUsageHint
 ): AgentConfig {
   const tools = availableToolNames ? categorizeTools(availableToolNames) : []
   const skills = availableSkills ?? []
   const categories = availableCategories ?? []
   const prompt = availableAgents
-    ? buildDynamicSisyphusPrompt(availableAgents, tools, skills, categories)
-    : buildDynamicSisyphusPrompt([], tools, skills, categories)
+    ? buildDynamicSisyphusPrompt(availableAgents, tools, skills, categories, restrictedUsage)
+    : buildDynamicSisyphusPrompt([], tools, skills, categories, restrictedUsage)
 
   const permission = { question: "allow", call_omo_agent: "deny" } as AgentConfig["permission"]
   const base = {

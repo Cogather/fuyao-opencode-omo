@@ -1,7 +1,7 @@
 import type { AgentConfig } from "@opencode-ai/sdk"
 import type { BuiltinAgentName, AgentOverrideConfig, AgentOverrides, AgentFactory, AgentPromptMetadata } from "./types"
 import type { CategoriesConfig, CategoryConfig, GitMasterConfig } from "../config/schema"
-import { createSisyphusAgent } from "./sisyphus"
+import { createSisyphusAgent, type RestrictedUsageHint } from "./sisyphus"
 import { createOracleAgent, ORACLE_PROMPT_METADATA } from "./oracle"
 import { createLibrarianAgent, LIBRARIAN_PROMPT_METADATA } from "./librarian"
 import { createExploreAgent, EXPLORE_PROMPT_METADATA } from "./explore"
@@ -17,6 +17,13 @@ import { resolveMultipleSkills } from "../features/opencode-skill-loader/skill-c
 import { createBuiltinSkills } from "../features/builtin-skills"
 import type { LoadedSkill, SkillScope } from "../features/opencode-skill-loader/types"
 import type { BrowserAutomationProvider } from "../config/schema"
+import type { ResolvedSubagentAvailability } from "../tools/delegate-task/subagent-availability"
+
+/** Resolved skill_availability; when provided, only included skills are added to agent prompt. */
+export interface SkillAvailabilityForPrompt {
+  includeBuiltinInAvailable: boolean
+  includeDirectoryInAvailable: boolean
+}
 
 type AgentSource = AgentFactory | AgentConfig
 
@@ -221,7 +228,9 @@ export async function createBuiltinAgents(
   discoveredSkills: LoadedSkill[] = [],
   client?: any,
   browserProvider?: BrowserAutomationProvider,
-  uiSelectedModel?: string
+  uiSelectedModel?: string,
+  skillAvailability?: SkillAvailabilityForPrompt,
+  subagentAvailability?: ResolvedSubagentAvailability
 ): Promise<Record<string, AgentConfig>> {
   const connectedProviders = readConnectedProvidersCache()
   // IMPORTANT: Do NOT pass client to fetchAvailableModels during plugin initialization.
@@ -260,10 +269,41 @@ export async function createBuiltinAgents(
       location: mapScopeToLocation(skill.scope),
     }))
 
-  const availableSkills: AvailableSkill[] = [...builtinAvailable, ...discoveredAvailable]
+  // Restricted mode: still inject FULL skills/subagents into prompt, but add instruction to only proactively show allowed set; answer about non-allowed only when user explicitly asks.
+  const skillRestricted =
+    skillAvailability &&
+    skillAvailability.includeBuiltinInAvailable === false &&
+    skillAvailability.includeDirectoryInAvailable === false
+  const includeBuiltin = skillAvailability?.includeBuiltinInAvailable !== false
+  const includeDirectory = skillAvailability?.includeDirectoryInAvailable !== false
+  const fullAvailableSkills: AvailableSkill[] = [
+    ...(includeBuiltin ? builtinAvailable : []),
+    ...(includeDirectory ? discoveredAvailable : []),
+  ]
+  function getAllowedSkillNamesForAgent(agentKey: string): string[] {
+    const override =
+      Object.entries(agentOverrides).find(([k]) => k.toLowerCase() === agentKey.toLowerCase())?.[1]
+    return (override as { skills?: string[] } | undefined)?.skills ?? []
+  }
 
   // Collect general agents first (for availableAgents), but don't add to result yet
   const pendingAgentConfigs: Map<string, AgentConfig> = new Map()
+
+  const subagentRestricted =
+    subagentAvailability &&
+    !subagentAvailability.allowFullList &&
+    subagentAvailability.includeBuiltinInAvailable === false &&
+    subagentAvailability.includeDirectoryInAvailable === false
+  const includeBuiltinSubagentsInPrompt =
+    !subagentAvailability ||
+    subagentAvailability.allowFullList ||
+    subagentAvailability.includeBuiltinInAvailable === true
+  // When restricted we still inject full list; when not restricted inject per flags.
+  function getAllowedSubagentNamesForAgent(agentKey: string): string[] {
+    const override =
+      Object.entries(agentOverrides).find(([k]) => k.toLowerCase() === agentKey.toLowerCase())?.[1]
+    return (override as { subagents?: string[] } | undefined)?.subagents ?? []
+  }
 
    for (const [name, source] of Object.entries(agentSources)) {
      const agentName = name as BuiltinAgentName
@@ -328,6 +368,9 @@ export async function createBuiltinAgents(
     }
   }
 
+  // Always inject full list when we have any; restricted mode adds instruction to only proactively show allowed set.
+  const agentsForPrompt = (subagentRestricted || includeBuiltinSubagentsInPrompt) ? availableAgents : []
+
    const sisyphusOverride = agentOverrides["sisyphus"]
    const sisyphusRequirement = AGENT_MODEL_REQUIREMENTS["sisyphus"]
    const hasSisyphusExplicitConfig = sisyphusOverride !== undefined
@@ -348,12 +391,20 @@ export async function createBuiltinAgents(
     if (sisyphusResolution) {
       const { model: sisyphusModel, variant: sisyphusResolvedVariant } = sisyphusResolution
 
+      const sisyphusRestricted: RestrictedUsageHint | undefined =
+        skillRestricted || subagentRestricted
+          ? {
+              allowedSkillNames: getAllowedSkillNamesForAgent("sisyphus"),
+              allowedSubagentNames: getAllowedSubagentNamesForAgent("sisyphus"),
+            }
+          : undefined
       let sisyphusConfig = createSisyphusAgent(
         sisyphusModel,
-        availableAgents,
+        agentsForPrompt,
         undefined,
-        availableSkills,
-        availableCategories
+        fullAvailableSkills,
+        availableCategories,
+        sisyphusRestricted
       )
       
       if (sisyphusResolvedVariant) {
@@ -388,12 +439,20 @@ export async function createBuiltinAgents(
       if (hephaestusResolution) {
         const { model: hephaestusModel, variant: hephaestusResolvedVariant } = hephaestusResolution
 
+        const hephaestusRestricted: RestrictedUsageHint | undefined =
+          skillRestricted || subagentRestricted
+            ? {
+                allowedSkillNames: getAllowedSkillNamesForAgent("hephaestus"),
+                allowedSubagentNames: getAllowedSubagentNamesForAgent("hephaestus"),
+              }
+            : undefined
         let hephaestusConfig = createHephaestusAgent(
           hephaestusModel,
-          availableAgents,
+          agentsForPrompt,
           undefined,
-          availableSkills,
-          availableCategories
+          fullAvailableSkills,
+          availableCategories,
+          hephaestusRestricted
         )
         
         hephaestusConfig = { ...hephaestusConfig, variant: hephaestusResolvedVariant ?? "medium" }
@@ -437,11 +496,19 @@ export async function createBuiltinAgents(
     if (atlasResolution) {
       const { model: atlasModel, variant: atlasResolvedVariant } = atlasResolution
 
+      const atlasRestricted: RestrictedUsageHint | undefined =
+        skillRestricted || subagentRestricted
+          ? {
+              allowedSkillNames: getAllowedSkillNamesForAgent("atlas"),
+              allowedSubagentNames: getAllowedSubagentNamesForAgent("atlas"),
+            }
+          : undefined
       let orchestratorConfig = createAtlasAgent({
         model: atlasModel,
-        availableAgents,
-        availableSkills,
+        availableAgents: agentsForPrompt,
+        availableSkills: fullAvailableSkills,
         userCategories: categories,
+        restrictedUsage: atlasRestricted,
       })
       
       if (atlasResolvedVariant) {

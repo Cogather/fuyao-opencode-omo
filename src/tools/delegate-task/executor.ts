@@ -16,6 +16,8 @@ import { log, getAgentToolRestrictions, resolveModelPipeline, promptWithModelSug
 import { fetchAvailableModels, isModelAvailable } from "../../shared/model-availability"
 import { readConnectedProvidersCache } from "../../shared/connected-providers-cache"
 import { CATEGORY_MODEL_REQUIREMENTS } from "../../shared/model-requirements"
+import type { ResolvedSubagentAvailability } from "./subagent-availability"
+import { isBuiltinSubagent, isDirectorySubagent } from "./subagent-availability"
 
 const SISYPHUS_JUNIOR_AGENT = "sisyphus-junior"
 
@@ -28,6 +30,8 @@ export interface ExecutorContext {
   sisyphusJuniorModel?: string
   browserProvider?: BrowserAutomationProvider
   onSyncSessionCreated?: (event: { sessionID: string; parentID: string; title: string }) => Promise<void>
+  /** Resolved subagent_availability (builtin/directory vs only configured). */
+  subagentAvailability?: ResolvedSubagentAvailability
 }
 
 export interface ParentContext {
@@ -931,10 +935,42 @@ Create the work plan directly - that's your job as the planning agent.`,
 
   try {
     const agentsResult = await client.app.agents()
-    type AgentInfo = { name: string; mode?: "subagent" | "primary" | "all"; model?: { providerID: string; modelID: string } }
-    const agents = (agentsResult as { data?: AgentInfo[] }).data ?? agentsResult as unknown as AgentInfo[]
+    const agents = (agentsResult as { data?: AgentInfoForSubagent[] }).data ?? agentsResult as unknown as AgentInfoForSubagent[]
 
-    const callableAgents = agents.filter((a) => a.mode !== "primary")
+    let callableAgents = agents.filter((a) => a.mode !== "primary")
+
+    const availability = executorCtx.subagentAvailability
+    const allowFullList = availability?.allowFullList === true
+    if (!allowFullList && availability) {
+      const parentEntry = parentAgent?.trim()
+        ? agents.find(
+            (a) =>
+              a.name === parentAgent || a.name.toLowerCase() === parentAgent.trim().toLowerCase()
+          )
+        : undefined
+      const configured = new Set(
+        getSubagentsFromEntry(parentEntry).map((s) => s.trim().toLowerCase())
+      )
+      const allowedSet = new Set<string>(configured)
+      for (const a of callableAgents) {
+        const nameLower = a.name.toLowerCase()
+        if (configured.has(nameLower)) continue
+        if (availability.includeBuiltinInAvailable && isBuiltinSubagent(a.name)) allowedSet.add(nameLower)
+        if (availability.includeDirectoryInAvailable && isDirectorySubagent(a.name)) allowedSet.add(nameLower)
+      }
+      callableAgents = callableAgents.filter((a) => allowedSet.has(a.name.toLowerCase()))
+    } else if (!allowFullList && parentAgent?.trim()) {
+      const parentEntry = agents.find(
+        (a) => a.name === parentAgent || a.name.toLowerCase() === parentAgent.trim().toLowerCase()
+      )
+      const parentSubagents = getSubagentsFromEntry(parentEntry)
+      if (parentSubagents.length) {
+        const allowedSet = new Set(parentSubagents.map((s) => s.trim().toLowerCase()))
+        callableAgents = callableAgents.filter((a) => allowedSet.has(a.name.toLowerCase()))
+      } else {
+        callableAgents = []
+      }
+    }
 
     const matchedAgent = callableAgents.find(
       (agent) => agent.name.toLowerCase() === agentToUse.toLowerCase()
@@ -972,4 +1008,79 @@ Create the work plan directly - that's your job as the planning agent.`,
   }
 
   return { agentToUse, categoryModel }
+}
+
+/** Agent entry shape from app.agents() (may include subagents for whitelist). OpenCode may put subagents in options when not in schema. */
+export type AgentInfoForSubagent = {
+  name: string
+  mode?: "subagent" | "primary" | "all"
+  model?: { providerID: string; modelID: string }
+  subagents?: string[]
+  options?: { subagents?: string[] }
+}
+
+/** Read subagents from agent entry. OpenCode (when unmodified) puts subagents in options; OMO/patched OpenCode may have top-level subagents. */
+export function getSubagentsFromEntry(entry: AgentInfoForSubagent | undefined): string[] {
+  if (!entry) return []
+  const raw = entry.subagents ?? entry.options?.subagents
+  return Array.isArray(raw) ? raw : []
+}
+
+export interface GetCallableSubagentNamesOptions {
+  /** Resolved subagent_availability; when allowFullList or omitted, full list. Otherwise configured + builtin/directory per flags. */
+  subagentAvailability?: ResolvedSubagentAvailability
+}
+
+/**
+ * Returns the list of subagent names the given parent agent can delegate to.
+ * Uses same logic as resolveSubagentExecution: allowFullList -> full; else configured + includeBuiltin/includeDirectory.
+ */
+export async function getCallableSubagentNames(
+  client: ExecutorContext["client"],
+  parentAgent: string | undefined,
+  options?: GetCallableSubagentNamesOptions
+): Promise<string[]> {
+  try {
+    const agentsResult = await client.app.agents()
+    const agents =
+      (agentsResult as { data?: AgentInfoForSubagent[] }).data ??
+      (agentsResult as unknown as AgentInfoForSubagent[])
+
+    let callable = agents.filter((a) => a.mode !== "primary")
+    const availability = options?.subagentAvailability
+    const allowFullList = availability?.allowFullList === true
+    if (!allowFullList && availability) {
+      const parentEntry = parentAgent?.trim()
+        ? agents.find(
+            (a) =>
+              a.name === parentAgent || a.name.toLowerCase() === parentAgent.trim().toLowerCase()
+          )
+        : undefined
+      const configured = new Set(
+        getSubagentsFromEntry(parentEntry).map((s) => s.trim().toLowerCase())
+      )
+      const allowedSet = new Set<string>(configured)
+      for (const a of callable) {
+        const nameLower = a.name.toLowerCase()
+        if (configured.has(nameLower)) continue
+        if (availability.includeBuiltinInAvailable && isBuiltinSubagent(a.name)) allowedSet.add(nameLower)
+        if (availability.includeDirectoryInAvailable && isDirectorySubagent(a.name)) allowedSet.add(nameLower)
+      }
+      callable = callable.filter((a) => allowedSet.has(a.name.toLowerCase()))
+    } else if (!allowFullList && parentAgent?.trim()) {
+      const parentEntry = agents.find(
+        (a) => a.name === parentAgent || a.name.toLowerCase() === parentAgent.trim().toLowerCase()
+      )
+      const parentSubagents = getSubagentsFromEntry(parentEntry)
+      if (parentSubagents.length) {
+        const allowedSet = new Set(parentSubagents.map((s) => s.trim().toLowerCase()))
+        callable = callable.filter((a) => allowedSet.has(a.name.toLowerCase()))
+      } else {
+        callable = []
+      }
+    }
+    return callable.map((a) => a.name).sort()
+  } catch {
+    return []
+  }
 }

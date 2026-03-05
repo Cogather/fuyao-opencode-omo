@@ -1,6 +1,7 @@
 import type { PluginInput } from "@opencode-ai/plugin"
 import type { BackgroundManager } from "../../features/background-agent"
 import type { CategoriesConfig, GitMasterConfig, BrowserAutomationProvider } from "../../config/schema"
+import type { ResolvedSubagentAvailability } from "./subagent-availability"
 
 export type OpencodeClient = PluginInput["client"]
 
@@ -42,6 +43,8 @@ export interface DelegateTaskToolOptions {
   sisyphusJuniorModel?: string
   browserProvider?: BrowserAutomationProvider
   onSyncSessionCreated?: (event: SyncSessionCreatedEvent) => Promise<void>
+  /** Resolved subagent_availability (builtin/directory vs only configured). */
+  subagentAvailability?: ResolvedSubagentAvailability
 }
 
 export interface BuildSystemContentInput {

@@ -73,6 +73,8 @@ import {
   discoverCommandsSync,
   sessionExists,
   createDelegateTask,
+  createListAvailableSubagentsTool,
+  resolveSubagentAvailabilityConfig,
   interactive_bash,
   startTmuxCheck,
   lspManager,
@@ -341,6 +343,7 @@ const OhMyOpenCodePlugin: Plugin = async (ctx) => {
   );
   const lookAt = isMultimodalLookerEnabled ? createLookAt(ctx) : null;
   const browserProvider = pluginConfig.browser_automation_engine?.provider ?? "playwright";
+  const subagentAvailability = resolveSubagentAvailabilityConfig(pluginConfig.subagent_availability);
   const delegateTask = createDelegateTask({
     manager: backgroundManager,
     client: ctx.client,
@@ -349,6 +352,7 @@ const OhMyOpenCodePlugin: Plugin = async (ctx) => {
     gitMasterConfig: pluginConfig.git_master,
     sisyphusJuniorModel: pluginConfig.agents?.["sisyphus-junior"]?.model,
     browserProvider,
+    subagentAvailability,
     onSyncSessionCreated: async (event) => {
       log("[index] onSyncSessionCreated callback", {
         sessionID: event.sessionID,
@@ -366,6 +370,10 @@ const OhMyOpenCodePlugin: Plugin = async (ctx) => {
         },
       });
     },
+  });
+  const listAvailableSubagentsTool = createListAvailableSubagentsTool({
+    client: ctx.client,
+    subagentAvailability,
   });
   const disabledSkills = new Set(pluginConfig.disabled_skills ?? []);
   const systemMcpNames = getSystemMcpServerNames();
@@ -452,6 +460,7 @@ const OhMyOpenCodePlugin: Plugin = async (ctx) => {
       call_omo_agent: callOmoAgent,
       ...(lookAt ? { look_at: lookAt } : {}),
       delegate_task: delegateTask,
+      list_available_subagents: listAvailableSubagentsTool,
       skill: skillTool,
       list_available_skills: listAvailableSkillsTool,
       skill_mcp: skillMcpTool,

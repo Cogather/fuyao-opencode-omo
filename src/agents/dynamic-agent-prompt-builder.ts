@@ -22,6 +22,25 @@ export interface AvailableCategory {
   description: string
 }
 
+/** When in restricted mode: full skills/subagents are still in the prompt, but we tell the model to only proactively show the allowed set and to answer about non-allowed only when user explicitly asks. */
+export function buildRestrictedUsageSection(
+  allowedSkillNames: string[],
+  allowedSubagentNames: string[]
+): string {
+  const skillList = allowedSkillNames.length ? allowedSkillNames.map((n) => `\`${n}\``).join(", ") : "(none)"
+  const agentList = allowedSubagentNames.length ? allowedSubagentNames.map((n) => `\`${n}\``).join(", ") : "(none)"
+  return `
+### Restricted Availability (MUST follow)
+
+**Skills you may proactively use and list:** ${skillList}
+**Subagents you may proactively use and list:** ${agentList}
+
+- Do NOT proactively list or count all available skills or subagents. Only present the above as "available" to the user. Do not proactively tell the user about extra skills or subagents.
+- There are also **globally available** skills and subagents. When the user explicitly asks for one: you know how it works (full descriptions are in this prompt). You can introduce it and try to use or call it. You may briefly note that it is not in this agent's configured scope but is globally available.
+- Default: only actively show and use the skills and subagents listed above.
+`
+}
+
 export function categorizeTools(toolNames: string[]): AvailableTool[] {
   return toolNames.map((name) => {
     let category: AvailableTool["category"] = "other"

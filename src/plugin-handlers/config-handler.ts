@@ -12,6 +12,7 @@ import {
   discoverProjectClaudeSkills,
   discoverOpencodeGlobalSkills,
   discoverOpencodeProjectSkills,
+  resolveSkillAvailabilityConfig,
 } from "../features/opencode-skill-loader";
 import {
   loadUserAgents,
@@ -28,10 +29,19 @@ import { AGENT_NAME_MAP } from "../shared/migration";
 import { AGENT_MODEL_REQUIREMENTS } from "../shared/model-requirements";
 import { PROMETHEUS_SYSTEM_PROMPT, PROMETHEUS_PERMISSION } from "../agents/prometheus";
 import { DEFAULT_CATEGORIES } from "../tools/delegate-task/constants";
+import { resolveSubagentAvailabilityConfig } from "../tools/delegate-task/subagent-availability";
 import type { ModelCacheState } from "../plugin-state";
 import type { CategoryConfig } from "../config/schema";
 import { getPlatformAgentList, platformAppsToAgentRecord } from "../features/platform-agent";
 import type { PlatformType } from "../features/platform-agent";
+
+/** Ensure subagents is in options so OpenCode (when unmodified) carries it via options merge. */
+function ensureSubagentsInOptions(agent: Record<string, unknown>): Record<string, unknown> {
+  const subagents = agent.subagents as string[] | undefined
+  if (!Array.isArray(subagents) || subagents.length === 0) return agent
+  const options = (agent.options as Record<string, unknown>) ?? {}
+  return { ...agent, options: { ...options, subagents } }
+}
 
 export interface ConfigHandlerDeps {
   ctx: { directory: string; client?: any };
@@ -173,6 +183,8 @@ export function createConfigHandler(deps: ConfigHandlerDeps) {
     // config.model represents the currently active model in OpenCode (including UI selection)
     // Pass it as uiSelectedModel so it takes highest priority in model resolution
     const currentModel = config.model as string | undefined;
+    const skillAvailabilityForPrompt = resolveSkillAvailabilityConfig(pluginConfig.skill_availability);
+    const subagentAvailability = resolveSubagentAvailabilityConfig(pluginConfig.subagent_availability);
     const builtinAgents = await createBuiltinAgents(
       migratedDisabledAgents,
       pluginConfig.agents,
@@ -183,7 +195,9 @@ export function createConfigHandler(deps: ConfigHandlerDeps) {
       allDiscoveredSkills,
       ctx.client,
       browserProvider,
-      currentModel // uiSelectedModel - takes highest priority
+      currentModel, // uiSelectedModel - takes highest priority
+      skillAvailabilityForPrompt,
+      subagentAvailability
     );
 
     // Claude Code agents: Do NOT apply permission migration
@@ -365,7 +379,7 @@ export function createConfigHandler(deps: ConfigHandlerDeps) {
             })
             .map(([key, value]) => [
               key,
-              value ? migrateAgentConfig(value as Record<string, unknown>) : value,
+              value ? ensureSubagentsInOptions(migrateAgentConfig(value as Record<string, unknown>) as Record<string, unknown>) : value,
             ])
         )
       : {};
@@ -386,10 +400,11 @@ export function createConfigHandler(deps: ConfigHandlerDeps) {
     // Manual config overrides runtime: for platform keys merge platform base + user override; other keys are user-only.
     const mergedPlatformAndUser: Record<string, unknown> = { ...platformAgentRecord };
     for (const [key, value] of Object.entries(userAgentOverrides)) {
-      mergedPlatformAndUser[key] =
+      const merged =
         key in platformAgentRecord
           ? { ...(platformAgentRecord[key] as Record<string, unknown>), ...(value as Record<string, unknown>) }
-          : value;
+          : (value as Record<string, unknown>);
+      mergedPlatformAndUser[key] = ensureSubagentsInOptions(merged);
     }
 
     config.agent = {
@@ -410,16 +425,17 @@ export function createConfigHandler(deps: ConfigHandlerDeps) {
         ? Object.fromEntries(
             Object.entries(pluginConfig.agents).map(([key, value]) => [
               key,
-              value ? migrateAgentConfig(value as Record<string, unknown>) : value,
+              value ? ensureSubagentsInOptions(migrateAgentConfig(value as Record<string, unknown>) as Record<string, unknown>) : value,
             ])
           )
         : {};
       const mergedPlatformAndUserElse: Record<string, unknown> = { ...platformAgentRecord };
       for (const [key, value] of Object.entries(userAgentOverridesElse)) {
-        mergedPlatformAndUserElse[key] =
+        const merged =
           key in platformAgentRecord
             ? { ...(platformAgentRecord[key] as Record<string, unknown>), ...(value as Record<string, unknown>) }
-            : value;
+            : (value as Record<string, unknown>);
+        mergedPlatformAndUserElse[key] = ensureSubagentsInOptions(merged);
       }
       // Builtin overrides from config (e.g. oracle: { model: "..." }) still apply
       const builtinOverridesFromConfig = Object.fromEntries(

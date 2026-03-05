@@ -384,6 +384,20 @@ export const SkillAvailabilityConfigSchema = z.object({
 })
 export type SkillAvailabilityConfig = z.infer<typeof SkillAvailabilityConfigSchema>
 
+/**
+ * Control subagent visibility and delegation (like skill_availability).
+ * - true: full list visible and usable (original behavior).
+ * - false / object: only agent.subagents + optionally builtin and/or directory subagents.
+ * Builtin = OMO builtin agents (name has no ":"). Directory = platform agents (name has ":", e.g. fuyao:CodeHelper).
+ */
+export const SubagentAvailabilityConfigSchema = z.object({
+  /** Include all builtin subagents (no ":" in name) in available list when true; when false, only if in agent.subagents. Default false. */
+  include_builtin_in_available: z.boolean().optional(),
+  /** Include all directory/platform subagents (":" in name) in available list when true; when false, only if in agent.subagents. Default false. */
+  include_directory_in_available: z.boolean().optional(),
+})
+export type SubagentAvailabilityConfig = z.infer<typeof SubagentAvailabilityConfigSchema>
+
 /** Platform agent: which platforms to pull agent list from. Connection/auth is implementation detail, not exposed. */
 export const PlatformAgentConfigSchema = z.object({
   enabled: z.boolean().optional(),
@@ -424,6 +438,12 @@ export const OhMyOpenCodeConfigSchema = z.object({
   default_agent: z.string().optional(),
   /** Control which skills are shown as available per agent (builtin / directory vs only agent.skills). */
   skill_availability: SkillAvailabilityConfigSchema.optional(),
+  /**
+   * Control subagent visibility and delegation. Same idea as skill_availability (builtin vs directory).
+   * - true: full list visible and usable.
+   * - false or object: only agent.subagents + include_builtin_in_available / include_directory_in_available (default both false).
+   */
+  subagent_availability: z.union([z.literal(true), SubagentAvailabilityConfigSchema]).optional(),
 })
 
 export type OhMyOpenCodeConfig = z.infer<typeof OhMyOpenCodeConfigSchema>

@@ -150,6 +150,10 @@ export function generateModelConfig(config: InstallConfig): GeneratedOmoConfig {
         include_builtin_in_available: true,
         include_directory_in_available: true,
       },
+      subagent_availability: {
+        include_builtin_in_available: true,
+        include_directory_in_available: true,
+      },
     }
   }
 
@@ -228,6 +232,10 @@ export function generateModelConfig(config: InstallConfig): GeneratedOmoConfig {
     platform_agent: { enabled: true, platforms: ["fuyao", "agentcenter"] },
     default_agent: "sisyphus",
     skill_availability: {
+      include_builtin_in_available: true,
+      include_directory_in_available: true,
+    },
+    subagent_availability: {
       include_builtin_in_available: true,
       include_directory_in_available: true,
     },

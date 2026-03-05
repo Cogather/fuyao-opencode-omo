@@ -1,6 +1,7 @@
 import type { AgentConfig } from "@opencode-ai/sdk"
 import type { AgentMode } from "./types"
 import type { AvailableAgent, AvailableTool, AvailableSkill, AvailableCategory } from "./dynamic-agent-prompt-builder"
+import type { RestrictedUsageHint } from "./sisyphus"
 import {
   buildKeyTriggersSection,
   buildToolSelectionTable,
@@ -11,6 +12,7 @@ import {
   buildOracleSection,
   buildHardBlocksSection,
   buildAntiPatternsSection,
+  buildRestrictedUsageSection,
   categorizeTools,
 } from "./dynamic-agent-prompt-builder"
 
@@ -34,7 +36,8 @@ function buildHephaestusPrompt(
   availableAgents: AvailableAgent[] = [],
   availableTools: AvailableTool[] = [],
   availableSkills: AvailableSkill[] = [],
-  availableCategories: AvailableCategory[] = []
+  availableCategories: AvailableCategory[] = [],
+  restrictedUsage?: RestrictedUsageHint
 ): string {
   const keyTriggers = buildKeyTriggersSection(availableAgents, availableSkills)
   const toolSelection = buildToolSelectionTable(availableAgents, availableTools, availableSkills)
@@ -45,6 +48,9 @@ function buildHephaestusPrompt(
   const oracleSection = buildOracleSection(availableAgents)
   const hardBlocks = buildHardBlocksSection()
   const antiPatterns = buildAntiPatternsSection()
+  const restrictedSection = restrictedUsage
+    ? buildRestrictedUsageSection(restrictedUsage.allowedSkillNames, restrictedUsage.allowedSubagentNames)
+    : ""
 
   return `You are Hephaestus, an autonomous deep worker for software engineering.
 
@@ -69,6 +75,7 @@ You do not guess. You verify. You do not stop early. You complete.
 ${hardBlocks}
 
 ${antiPatterns}
+${restrictedSection}
 
 ## Success Criteria (COMPLETION DEFINITION)
 
@@ -485,14 +492,15 @@ export function createHephaestusAgent(
   availableAgents?: AvailableAgent[],
   availableToolNames?: string[],
   availableSkills?: AvailableSkill[],
-  availableCategories?: AvailableCategory[]
+  availableCategories?: AvailableCategory[],
+  restrictedUsage?: RestrictedUsageHint
 ): AgentConfig {
   const tools = availableToolNames ? categorizeTools(availableToolNames) : []
   const skills = availableSkills ?? []
   const categories = availableCategories ?? []
   const prompt = availableAgents
-    ? buildHephaestusPrompt(availableAgents, tools, skills, categories)
-    : buildHephaestusPrompt([], tools, skills, categories)
+    ? buildHephaestusPrompt(availableAgents, tools, skills, categories, restrictedUsage)
+    : buildHephaestusPrompt([], tools, skills, categories, restrictedUsage)
 
   return {
     description:

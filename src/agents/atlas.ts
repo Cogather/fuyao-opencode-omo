@@ -3,7 +3,8 @@ import type { AgentMode, AgentPromptMetadata } from "./types"
 
 const MODE: AgentMode = "primary"
 import type { AvailableAgent, AvailableSkill, AvailableCategory } from "./dynamic-agent-prompt-builder"
-import { buildCategorySkillsDelegationGuide } from "./dynamic-agent-prompt-builder"
+import { buildCategorySkillsDelegationGuide, buildRestrictedUsageSection } from "./dynamic-agent-prompt-builder"
+import type { RestrictedUsageHint } from "./sisyphus"
 import type { CategoryConfig } from "../config/schema"
 import { DEFAULT_CATEGORIES, CATEGORY_DESCRIPTIONS } from "../tools/delegate-task/constants"
 import { createAgentToolRestrictions } from "../shared/permission-compat"
@@ -23,6 +24,7 @@ export interface OrchestratorContext {
   availableAgents?: AvailableAgent[]
   availableSkills?: AvailableSkill[]
   userCategories?: Record<string, CategoryConfig>
+  restrictedUsage?: RestrictedUsageHint
 }
 
 function buildAgentSelectionSection(agents: AvailableAgent[]): string {
@@ -131,6 +133,8 @@ In Greek mythology, Atlas holds up the celestial heavens. You hold up the entire
 You are a conductor, not a musician. A general, not a soldier. You DELEGATE, COORDINATE, and VERIFY.
 You never write code yourself. You orchestrate specialists who do.
 </identity>
+
+{RESTRICTED_SECTION}
 
 <mission>
 Complete ALL tasks in a work plan via \`delegate_task()\` until fully done.
@@ -503,6 +507,7 @@ function buildDynamicOrchestratorPrompt(ctx?: OrchestratorContext): string {
   const agents = ctx?.availableAgents ?? []
   const skills = ctx?.availableSkills ?? []
   const userCategories = ctx?.userCategories
+  const restrictedUsage = ctx?.restrictedUsage
 
   const allCategories = { ...DEFAULT_CATEGORIES, ...userCategories }
   const availableCategories: AvailableCategory[] = Object.entries(allCategories).map(([name]) => ({
@@ -515,6 +520,9 @@ function buildDynamicOrchestratorPrompt(ctx?: OrchestratorContext): string {
   const decisionMatrix = buildDecisionMatrix(agents, userCategories)
   const skillsSection = buildSkillsSection(skills)
   const categorySkillsGuide = buildCategorySkillsDelegationGuide(availableCategories, skills)
+  const restrictedSection = restrictedUsage
+    ? buildRestrictedUsageSection(restrictedUsage.allowedSkillNames, restrictedUsage.allowedSubagentNames)
+    : ""
 
   return ATLAS_SYSTEM_PROMPT
     .replace("{CATEGORY_SECTION}", categorySection)
@@ -522,6 +530,7 @@ function buildDynamicOrchestratorPrompt(ctx?: OrchestratorContext): string {
     .replace("{DECISION_MATRIX}", decisionMatrix)
     .replace("{SKILLS_SECTION}", skillsSection)
     .replace("{{CATEGORY_SKILLS_DELEGATION_GUIDE}}", categorySkillsGuide)
+    .replace("{RESTRICTED_SECTION}", restrictedSection)
 }
 
 export function createAtlasAgent(ctx: OrchestratorContext): AgentConfig {
