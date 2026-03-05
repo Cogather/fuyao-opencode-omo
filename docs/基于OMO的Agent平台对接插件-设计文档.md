@@ -1,6 +1,6 @@
 # 基于 OMO 的 Agent 平台对接插件 · 设计文档
 
-**文档与实现一致性**：本文档同时描述**设计目标**与**当前实现**。阶段一（列表拉取、合并、mock、subagents 白名单等）已与设计一致；version-cache、发布/同步 tool 与 command、版本校验 Toast 等为后续阶段，**当前未实现**。已实现与未实现清单见 **第 11 节「设计文档与代码一致性检查」**，实现阶段划分见 **3.7**。
+**文档与实现一致性**：本文档同时描述**设计目标**与**当前实现**。阶段一（列表拉取、合并、mock、subagents 白名单等）已与设计一致；version-cache、发布/同步 tool 与 command、版本校验 Toast 等为后续阶段，**当前未实现**。已实现与未实现清单见 **第 11 节「设计文档与代码一致性检查」**，实现阶段划分见 **3.7**。**对原 OMO 的修改**：逐文件说明见 **3.2.0**，**配置项新增与默认值**见 **3.2.0.1**，**Prompt 相关修改**见 **3.2.0.2**。
 
 ---
 
@@ -61,6 +61,8 @@
 
 ## 3. 总体架构
 
+以下 3.1 为核心组件与职责，**3.2 为涉及修改的 OMO 原始文件表**，**3.2.0 为对原 OMO 的逐文件修改说明**（含具体改动点与实现状态），3.2.1 起为配置项与平台扩展说明。
+
 ### 3.1 核心组件
 
 下表为设计目标；**实现状态**见第 11 节（✓ 已实现、✗ 未实现）。
@@ -87,6 +89,62 @@
 | **`src/tools/delegate-task/executor.ts`** | resolveSubagentExecution 中按 parent 的 subagents 过滤 callableAgents。 | ✓ 已实现 |
 | **`src/shared/agent-tool-restrictions.ts`** | 平台 agent 无内置表项时返回默认（如 `{}`）。 | ✓ 已实现 |
 | **`assets/fuyao-opencode.schema.json`** | schema 变更后重新生成。 | ✓ 存在 |
+
+### 3.2.0 对原 OMO 的修改说明（逐文件）
+
+本小节集中说明：为支持「平台 Agent 对接」及配套能力，**在原有 OMO 代码基础上做了哪些修改**。便于合入上游、冲突排查与代码评审。
+
+- **逐文件修改**：下表为按文件列出的修改内容与实现状态。
+- **配置项新增与默认值**：见 **3.2.0.1**（schema 新增字段、install 默认值一览）。
+- **Prompt 相关修改**：见 **3.2.0.2**（平台 mock 提示词、config-bridge 中 prompt 映射、与 OMO 原有 prompt 逻辑的关系）。
+
+| 原 OMO 路径 | 修改类型 | 具体修改内容 | 实现状态 |
+|-------------|----------|--------------|----------|
+| **`src/plugin-handlers/config-handler.ts`** | 修改 | ① 新增 `loadPlatformAgents(pluginConfig)`：若 `platform_agent.enabled` 且 `platforms` 非空，则遍历 platforms 调用 `getPlatformAgentList`，经 `platformAppsToAgentRecord` 得到平台 agent 表。② 在合并 `config.agent` 时：先得到 `platformAgentRecord`，再与用户配置 `pluginConfig.agents` 按 key 合并（平台为底、用户覆盖）；对合并后的 agent 调用 `ensureSubagentsInOptions` 保证 subagents 进入 options 供 OpenCode 使用。③ 合并完成后设置 `config.default_agent = pluginConfig.default_agent ?? ...`。④ **未实现**：合并后写 version-cache。 | ①②③ ✓；④ ✗ |
+| **`src/config/schema.ts`** | 修改 | ① 新增 `PlatformAgentConfigSchema`（enabled、platforms: fuyao/agentcenter[]）并挂到 `OhMyOpenCodeConfigSchema.platform_agent`。② 新增 `default_agent: z.string().optional()`。③ `AgentOverrideConfigSchema` 增加 `subagents`、`mcps`。④ `AgentOverridesSchema` 改为 `.catchall(AgentOverrideConfigSchema.optional())`，支持动态 key（如 `fuyao:CodeHelper`）用于平台 agent 覆盖。 | ✓ 已实现 |
+| **`src/index.ts`** | 修改 | 在 `event.message.updated` 中：当 sessionID 为主会话且 role 为 user 时，调用 `persistDefaultAgent(agent)`，将当前 agent 写回配置文件的 `default_agent`。**未实现**：平台 Agent 版本校验与 showToast；注册 `platform_agent_publish`、`platform_agent_sync` tool 及 platform 相关 command。 | persistDefaultAgent ✓；版本校验/Tool/Command ✗ |
+| **`src/features/builtin-commands/commands.ts`** | 未修改 | 设计上需增加 `platform-publish`、`platform-sync`；当前未添加。 | ✗ 未实现 |
+| **`src/features/builtin-commands/types.ts`** | 未修改 | 设计上需在 `BuiltinCommandName` 中增加 `platform-publish`、`platform-sync`；当前未添加。 | ✗ 未实现 |
+| **`src/tools/delegate-task/executor.ts`** | 修改 | 在 `resolveSubagentExecution` 中：当非 allowFullList 且存在 parentAgent 时，通过 `getSubagentsFromEntry(parentEntry)` 读取父 agent 的 `subagents`（含 `entry.options.subagents` 兼容）；若 parent 配置了 subagents，则 `callableAgents` 仅保留该白名单内的 agent，实现平台 agent 与 subagent 的多层调用约束。 | ✓ 已实现 |
+| **`src/shared/agent-tool-restrictions.ts`** | 无需改 | 原有逻辑：未知 agent 名返回 `{}`（即无限制），平台 agent 名（如 `fuyao:CodeHelper`）不在内置表中，自然走默认允许，无需改代码。 | ✓ 已满足 |
+| **`src/cli/model-fallback.ts`** | 修改 | 在 `generateModelConfig()` 的返回值（含无 provider 的 early return 分支）中增加 `platform_agent: { enabled: true, platforms: ["fuyao", "agentcenter"] }` 与 `default_agent: "sisyphus"`，保证 install 后默认配置包含平台对接与默认 agent。 | ✓ 已实现 |
+| **`src/cli/config-manager.ts`** | 修改 | `writeOmoConfig` 在目标配置文件已存在时，使用 `deepMerge(newConfig, existing)`（existing 覆盖 newConfig），实现**增量写入**：仅补充缺失项，不覆盖用户已修改的配置。 | ✓ 已实现 |
+| **`src/shared/persist-default-agent.ts`** | **新增** | 新文件：`persistDefaultAgent(agentName)` 将 `default_agent` 写回 fuyao-opencode 配置文件，供 `index.ts` 在 message.updated（主会话 + user）时调用，使下次启动沿用当前 agent。 | ✓ 已实现 |
+| **`assets/fuyao-opencode.schema.json`** | 生成物 | schema 变更后需重新生成；项目内已存在该文件。 | ✓ 存在 |
+
+**说明**：
+
+- **仅新增、未改 OMO 原文件的**：`src/features/platform-agent/` 下全部为新增模块（types、api、config-bridge、platforms、index、mock-data），不修改 OMO 原有 feature 目录下的其他代码。
+- **冲突与合入**：若与上游 OMO 同步，需重点核对 `config-handler.ts`（合并顺序与 loadPlatformAgents 插入点）、`schema.ts`（platform_agent、default_agent、agents catchall）、`delegate-task/executor.ts`（resolveSubagentExecution 中 subagents 过滤）、`index.ts`（message.updated 分支）、`model-fallback.ts`（返回值字段）、`config-manager.ts`（writeOmoConfig 的 deepMerge 语义）。
+
+### 3.2.0.1 配置项新增与默认值
+
+以下配置项为本插件在 OMO 配置上**新增或扩展**的字段；**定义位置**在 `src/config/schema.ts`，**install 时写入的默认值**在 `src/cli/model-fallback.ts` 的 `generateModelConfig()` 中。便于与上游 schema 对比、排查配置冲突。
+
+| 配置项 | Schema 定义 | install 默认值（model-fallback） | 说明 |
+|--------|-------------|----------------------------------|------|
+| **`platform_agent`** | `PlatformAgentConfigSchema`：`enabled`、`platforms: ("fuyao"\|\"agentcenter")[]` | `{ enabled: true, platforms: ["fuyao", "agentcenter"] }` | 是否启用平台对接及拉取哪些平台；连接与鉴权不暴露。 |
+| **`default_agent`** | `OhMyOpenCodeConfigSchema.default_agent: z.string().optional()` | `"sisyphus"` | 启动时默认选中的 agent；可由 `persistDefaultAgent` 在用户发消息后写回。 |
+| **`skill_availability`** | `SkillAvailabilityConfigSchema`：`include_builtin_in_available`、`include_directory_in_available` | `{ include_builtin_in_available: true, include_directory_in_available: true }` | 控制各 agent 可见/可用的 skill 范围（内置 + 目录 vs 仅 agent.skills）。 |
+| **`subagent_availability`** | `z.union([z.literal(true), SubagentAvailabilityConfigSchema])`：`include_builtin_in_available`、`include_directory_in_available` | `{ include_builtin_in_available: true, include_directory_in_available: true }` | 控制 subagent 可见与 delegate_task 可调范围；与 platform agent 白名单配合。 |
+| **`agents` 动态 key** | `AgentOverridesSchema.catchall(AgentOverrideConfigSchema.optional())` | （不在此写入，由用户或平台拉取合并） | 支持 `fuyao:CodeHelper` 等平台 agent key，用于覆盖或扩展平台条目。 |
+| **`AgentOverrideConfigSchema` 扩展** | 新增字段：`subagents: z.array(z.string()).optional()`、`mcps: z.array(z.string()).optional()`；原有 `prompt`、`prompt_append` 不变 | - | 平台 agent 在配置中可覆盖 subagents、mcps；prompt/prompt_append 仍用于任意 agent 覆盖。 |
+
+**说明**：`skill_availability`、`subagent_availability` 的默认值在 `generateModelConfig()` 两处 return 中均存在（无 provider 的 early return 与正常 return），与 `platform_agent`、`default_agent` 一致。
+
+### 3.2.0.2 Prompt 相关修改
+
+以下为与 **prompt / 系统提示词** 相关的修改与约定，便于与上游或平台侧对齐、排查行为差异。
+
+| 位置 | 类型 | 内容说明 | 实现状态 |
+|------|------|----------|----------|
+| **`src/features/platform-agent/mock-data.ts`** | 新增 | **扶摇 Mock 系统提示词**：`FUYAO_MOCK_SYSTEM_PROMPT = "You are a Fuyao platform agent. Follow user instructions and use available tools. Stay concise and accurate."`；**AgentCenter Mock 系统提示词**：`AGENTCENTER_MOCK_SYSTEM_PROMPT = "You are an AgentCenter platform agent. Assist the user with their requests using the provided tools and context."`。各 mock agent 的 `prompt` 为「上述基础句 + 换行 + Focus: xxx」，例如 `FUYAO_MOCK_SYSTEM_PROMPT + "\nFocus: code generation and refactoring."`。真实接入后由平台/API 返回的 `prompt` 替代。 | ✓ 已实现（阶段一 mock） |
+| **`src/features/platform-agent/config-bridge.ts`** | 新增 | `platformAppToOpenCodeAgent` 将平台应用的 `app.prompt` 原样写入 OpenCode agent 条目的 `entry.prompt`，即**平台侧系统提示词直接作为该 agent 的 prompt**，无二次拼接或覆盖（用户可在 `agents["fuyao:CodeHelper"].prompt` 中覆盖）。 | ✓ 已实现 |
+| **`src/config/schema.ts`** | 未改 prompt 定义 | `AgentOverrideConfigSchema` 中已有 `prompt`、`prompt_append`；平台 agent 覆盖时同样生效，用于在配置中改写或追加 prompt。 | ✓ 沿用 |
+| **`src/plugin-handlers/config-handler.ts`** | 未改 prompt 逻辑 | 合并 agent 时不对 platform 拉取得到的 `prompt` 做统一改写；仅在与用户配置合并时，若用户写了 `agents["fuyao:CodeHelper"].prompt"` 或 `prompt_append`，按既有 OMO 逻辑覆盖或追加。 | ✓ 沿用 |
+| **delegate_task / 其他 OMO prompt** | 未改 | Sisyphus、Atlas、Hephaestus 等内置 agent 的 prompt 构建（`buildDynamicSisyphusPrompt`、`buildDynamicOrchestratorPrompt`、`buildHephaestusPrompt`）、delegate_task 的 `buildSystemContent` 等**未因平台对接而修改**；平台 agent 作为 subagent 被调用时，其 prompt 仍来自 config.agent 中该条目的 `prompt`（即平台或 mock 提供）。 | ✓ 无变更 |
+
+**约定**：平台 Agent 的**系统提示词来源**为「平台列表/详情 API 返回的 `prompt` 字段」或阶段一 mock 的 `mock-data.ts`；接入真实 API 后需保证返回结构与 `PlatformAgentApp.prompt` 一致，避免 config-bridge 或 config-handler 再解析富文本或模板。
 
 ### 3.2.1 新增配置项如何实现
 
@@ -645,6 +703,8 @@ OpenCode 合并多级配置（全局、项目、本地 plugin 目录等）时，
 | 2025-02 | **Skill 市场对接（设计）**：新增 3.10 节，描述对接 Skill 市场获取可选 skill 列表、选择 skill 注入到指定 agent、以及将 skill 下载到约定位置（`configDir/skills/market/<skillId>/`）的实现思路；与 opencode-skill-loader 发现链路衔接、数据模型与 API 抽象、涉及文件与阶段建议。 |
 | 2025-03 | **设计文档与代码一致性**：新增第 11 节「设计文档与代码一致性检查」；修正 3.3 目录为 `src/features/platform-agent/` 并标注当前实现状态。 |
 | 2025-03 | **文档优化**：文档开头增加「文档与实现一致性」说明；3.1/3.2 表格增加「实现状态」列；2 节分层与数据流补充已实现/未实现标注；9.6 小结区分阶段一与阶段二；11.4 增加快速对照说明。 |
+| 2025-03 | **对原 OMO 的修改说明**：新增 **3.2.0 对原 OMO 的修改说明（逐文件）**，集中列出 config-handler、schema、index、delegate-task/executor、model-fallback、config-manager、persist-default-agent 等修改/新增内容及实现状态，便于合入上游与冲突排查。 |
+| 2025-03 | **配置项与 Prompt 修改**：新增 **3.2.0.1 配置项新增与默认值**（platform_agent、default_agent、skill_availability、subagent_availability、agents 动态 key、AgentOverrideConfigSchema 扩展及 install 默认值）；新增 **3.2.0.2 Prompt 相关修改**（平台 mock 系统提示词、config-bridge prompt 映射、与 OMO prompt 逻辑的关系）。 |
 
 ---
 
