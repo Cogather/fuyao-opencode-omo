@@ -1,5 +1,7 @@
 # 基于 OMO 的 Agent 平台对接插件 · 设计文档
 
+**文档与实现一致性**：本文档同时描述**设计目标**与**当前实现**。阶段一（列表拉取、合并、mock、subagents 白名单等）已与设计一致；version-cache、发布/同步 tool 与 command、版本校验 Toast 等为后续阶段，**当前未实现**。已实现与未实现清单见 **第 11 节「设计文档与代码一致性检查」**，实现阶段划分见 **3.7**。
+
 ---
 
 ## 1. 需求分析
@@ -49,11 +51,11 @@
 
 - **定位**：在 OMO 内增加「平台对接」能力，通过 **配置驱动 + 平台 API 封装** 将平台 Agent/Skill/MCP 纳入 OMO 的 config 与运行时。
 - **分层**：
-  - **配置层**：schema 中增加 `platform_agent`（enabled、platforms 数组：拉取类别）；连接与鉴权对用户黑盒，由实现或环境提供。
-  - **插件逻辑层**：config-handler 在合并 config 时拉取平台列表并合并；index 注册 tools、commands、event 处理。
-  - **平台抽象层**：统一入口 `getPlatformAgentList` / `publishPlatformAgent`，按 platformType 调用 fuyao 或 agentcenter 的实现。
-  - **平台实现层**：`platforms/fuyao.ts`、`platforms/agentcenter.ts` 分别对接各自 HTTP API。
-- **数据流**：平台列表 → version-cache（按平台）+ config.agent/command/mcp；用户发布 → 平台 API → 更新 version-cache；版本校验 → 读缓存 + 拉列表比对 → Toast 或 sync 返回文案。
+  - **配置层**：schema 中增加 `platform_agent`（enabled、platforms 数组：拉取类别）；连接与鉴权对用户黑盒，由实现或环境提供。✓ 已实现
+  - **插件逻辑层**：config-handler 在合并 config 时拉取平台列表并合并；index 注册 tools、commands、event 处理。（拉取与合并已实现；发布/同步 tool、platform-publish/sync command、版本校验 Toast 为后续阶段，当前未实现。）
+  - **平台抽象层**：统一入口 `getPlatformAgentList` / `publishPlatformAgent`，按 platformType 调用 fuyao 或 agentcenter 的实现。（`getPlatformAgentList` 已实现；`publishPlatformAgent` 未实现。）
+  - **平台实现层**：`platforms/fuyao.ts`、`platforms/agentcenter.ts` 分别对接各自 HTTP API。（当前为 getAgentList mock；真实 API 与 publish 未实现。）
+- **数据流**：平台列表 → version-cache（按平台）+ config.agent/command/mcp；用户发布 → 平台 API → 更新 version-cache；版本校验 → 读缓存 + 拉列表比对 → Toast 或 sync 返回文案。（当前仅「平台列表 → config.agent 合并」已实现；version-cache 写入与发布/校验流程未实现。）
 
 ---
 
@@ -61,26 +63,30 @@
 
 ### 3.1 核心组件
 
-| 组件 | 职责 |
-|------|------|
-| **config-handler** | 在 config 合并末尾拉取平台列表，经 config-bridge 转为 OpenCode 配置并合并；写出版本到 version-cache。 |
-| **platform-agent 模块** | 提供 types、api 统一入口、config-bridge（平台↔OpenCode 互转）、version-cache（读/写）、platforms（fuyao/agentcenter 实现）。 |
-| **platform_agent_publish / platform_agent_sync** | 发布到平台（带 skills/mcps/subagents）、同步与版本比对（含 force_refresh 写缓存）；以 tool 暴露，并可通过 command 调用。 |
-| **event / hook** | 用户发消息且当前为平台 Agent 时触发版本校验，必要时 showToast 提示。 |
-| **delegate_task executor** | 解析 subagent 时若当前 agent 配置了 subagents，则仅允许该白名单内的 agent；与 agent-tool-restrictions 配合。 |
+下表为设计目标；**实现状态**见第 11 节（✓ 已实现、✗ 未实现）。
+
+| 组件 | 职责 | 实现状态 |
+|------|------|----------|
+| **config-handler** | 在 config 合并末尾拉取平台列表，经 config-bridge 转为 OpenCode 配置并合并；写出版本到 version-cache。 | 拉取与合并 ✓；写 version-cache ✗ |
+| **platform-agent 模块** | 提供 types、api 统一入口、config-bridge（平台↔OpenCode 互转）、version-cache（读/写）、platforms（fuyao/agentcenter 实现）。 | types/api/config-bridge/platforms 列表侧 ✓；version-cache、openCodeAgentToPlatformApp、publish ✗ |
+| **platform_agent_publish / platform_agent_sync** | 发布到平台（带 skills/mcps/subagents）、同步与版本比对（含 force_refresh 写缓存）；以 tool 暴露，并可通过 command 调用。 | ✗ 未实现 |
+| **event / hook** | 用户发消息且当前为平台 Agent 时触发版本校验，必要时 showToast 提示。 | message.updated 仅做 persistDefaultAgent ✓；平台版本校验与 Toast ✗ |
+| **delegate_task executor** | 解析 subagent 时若当前 agent 配置了 subagents，则仅允许该白名单内的 agent；与 agent-tool-restrictions 配合。 | ✓ 已实现 |
 
 ### 3.2 涉及修改的 OMO 原始文件与修改要点
 
-| 原始文件 | 修改内容 |
-|----------|----------|
-| **`src/plugin-handlers/config-handler.ts`** | 在 config 合并末尾：若启用平台对接，则遍历 `platforms` 对每平台调用 `getPlatformAgentList`；将返回的 `PlatformAgentApp[]` 经 `platformAppToOpenCodeAgent` 转为 OpenCode agent 配置（带平台前缀）并合并进 `config.agent`（及 command/mcp）；写出版本到 `version-cache`。 |
-| **`src/index.ts`** | 注册 tool：`platform_agent_publish`、`platform_agent_sync`；注入 platform 相关 command；在 event 中处理 message.updated 做版本校验与 Toast（或挂载独立 hook）。 |
-| **`src/config/schema.ts`** | 增加 `platform_agent` 配置段：`enabled`、`platforms`（拉取类别：`["fuyao"]` / `["agentcenter"]` / `["fuyao","agentcenter"]`）；不同步暴露连接与鉴权，由实现侧管理。同步 schema.json。 |
-| **`src/features/builtin-commands/commands.ts`** | 增加 `platform-publish`、`platform-sync`；或通过 config.command 注入。 |
-| **`src/features/builtin-commands/types.ts`** | BuiltinCommandName 增加 `platform-publish`、`platform-sync`。 |
-| **`src/tools/delegate-task/executor.ts`** | 在 `resolveSubagentExecution` 中：若当前 parent agent 配置了 `subagents`，则 callableAgents 仅保留该列表内 name，实现白名单。 |
-| **`src/shared/agent-tool-restrictions.ts`** | 平台 agent 无内置表项时返回默认（如 `{}`）。 |
-| **`assets/fuyao-opencode.schema.json`** | schema 变更后重新生成。 |
+下表为设计要点；**未实现项**（写 version-cache、注册 publish/sync tool、platform-publish/sync command、版本校验 Toast）见第 11.3 节。
+
+| 原始文件 | 修改内容 | 实现状态 |
+|----------|----------|----------|
+| **`src/plugin-handlers/config-handler.ts`** | 若启用平台对接则遍历 platforms 调用 getPlatformAgentList，经 platformAppToOpenCodeAgent 转为配置并合并进 config.agent；写出版本到 version-cache。 | 拉取与合并 ✓；写 version-cache ✗ |
+| **`src/index.ts`** | 注册 platform_agent_publish、platform_agent_sync；注入 platform command；message.updated 做版本校验与 Toast。 | 未注册上述 tool/command；版本校验与 Toast ✗ |
+| **`src/config/schema.ts`** | 增加 platform_agent（enabled、platforms）；agents 支持动态 key、subagents/mcps。 | ✓ 已实现 |
+| **`src/features/builtin-commands/commands.ts`** | 增加 platform-publish、platform-sync。 | ✗ 未实现 |
+| **`src/features/builtin-commands/types.ts`** | BuiltinCommandName 增加 platform-publish、platform-sync。 | ✗ 未实现 |
+| **`src/tools/delegate-task/executor.ts`** | resolveSubagentExecution 中按 parent 的 subagents 过滤 callableAgents。 | ✓ 已实现 |
+| **`src/shared/agent-tool-restrictions.ts`** | 平台 agent 无内置表项时返回默认（如 `{}`）。 | ✓ 已实现 |
+| **`assets/fuyao-opencode.schema.json`** | schema 变更后重新生成。 | ✓ 存在 |
 
 ### 3.2.1 新增配置项如何实现
 
@@ -135,30 +141,33 @@
 
 ### 3.3 新代码结构（目录与新增文件）
 
+> **路径说明**：platform-agent 模块实际位于 **`src/features/platform-agent/`**（非 `src/platform-agent/`）。以下为设计目标结构；与当前实现差异见 **第 11 节「设计文档与代码一致性检查」**。
+
 ```
 src/
-  platform-agent/
-    constants.ts           # 缓存文件名、API 路径等常量
-    types.ts               # PlatformAgentApp、请求/响应类型、PlatformType
-    platforms/
-      types.ts
-      fuyao.ts             # getAgentList, getAgentDetail, publishAgent
-      agentcenter.ts       # 同上
-      index.ts             # 按 platformType 返回对应实现
-    api.ts                 # getPlatformAgentList, publishPlatformAgent
-    config-bridge.ts       # platformAppToOpenCodeAgent, openCodeAgentToPlatformApp
-    version-cache.ts       # readVersionCache, writeVersionCache（按平台分 key）
-    index.ts
+  features/
+    platform-agent/         # 实际路径：src/features/platform-agent/
+      constants.ts          # 缓存文件名、API 路径等常量（当前未实现）
+      types.ts              # PlatformAgentApp、请求/响应类型、PlatformType ✓
+      platforms/
+        types.ts            # 当前无独立 types，复用上级 types ✓
+        fuyao.ts            # getAgentList（阶段一 mock）；getAgentDetail/publishAgent 未实现
+        agentcenter.ts      # 同上
+        index.ts            # 按 platformType 返回对应实现 ✓
+      api.ts                # getPlatformAgentList ✓；publishPlatformAgent 未实现
+      config-bridge.ts      # platformAppToOpenCodeAgent, platformAppsToAgentRecord ✓；openCodeAgentToPlatformApp 未实现
+      version-cache.ts      # 未实现
+      index.ts              # ✓
   tools/
-    platform-agent-publish/   # 发布 tool
-    platform-agent-sync/      # 同步与版本比对 tool
+    platform-agent-publish/   # 未实现
+    platform-agent-sync/      # 未实现
   hooks/
-    platform-agent-version-check/   # 可选：发消息时版本校验 + Toast
+    platform-agent-version-check/   # 未实现
   config/
-    schema.ts              # platform_agent 段
+    schema.ts              # platform_agent 段 ✓
 ```
 
-**新增文件清单**：`platform-agent/` 下 constants、types、platforms/*、api、config-bridge、version-cache、index；`tools/platform-agent-publish`、`platform-agent-sync` 各 tools/types/index；builtin-commands 模板 platform-publish、platform-sync。
+**新增文件清单**：`features/platform-agent/` 下 types、platforms/*、api、config-bridge、index 已存在；constants、version-cache、openCodeAgentToPlatformApp、publish 相关 API 与 tools/commands 见第 11 节实现状态。
 
 ### 3.4 平台区分（fuyao / agentcenter）
 
@@ -616,7 +625,7 @@ OpenCode 合并多级配置（全局、项目、本地 plugin 目录等）时，
 | plugin 手写？ | install 会自动写入 `plugin` 与可选配置；不跑 install 时需在配置目录手动加 `"fuyao-opencode"`。 |
 | 只有 npm/npx | 用户：`npm install fuyao-opencode`（或从 GitHub 安装），可选 `npx fuyao-opencode install`。开发者构建：可先 `npm install -g bun` 再 `bun run build`，或使用 GitHub 安装不本地构建。 |
 
-实现与设计文档保持一致：按上述步骤即可在「npm 安装的 OpenCode」中集成并日常使用 fuyao-opencode；对外分发时可选 npm 或仅 GitHub，不必强制发到 npm。
+按上述步骤即可在「npm 安装的 OpenCode」中集成并日常使用 fuyao-opencode；对外分发时可选 npm 或仅 GitHub。插件**阶段一能力**（列表拉取、合并、subagents 白名单等）已实现；阶段二及以后（version-cache、发布/同步、版本校验 Toast）见**第 11 节**。
 
 ---
 
@@ -634,3 +643,54 @@ OpenCode 合并多级配置（全局、项目、本地 plugin 目录等）时，
 | 2025-02 | **default_agent**：Schema 增加 `default_agent`；config-handler 从 `pluginConfig.default_agent` 读取并设置 `config.default_agent`；install 默认写入 `default_agent: "sisyphus"`。 |
 | 2025-02 | **default_agent 持久化**：新增 `shared/persist-default-agent.ts`，在 `message.updated`（主会话 + user 消息）时将当前 agent 写入配置的 `default_agent`，下次启动沿用；OpenCode 不自动写回，仅 OMO 通过事件持久化。 |
 | 2025-02 | **Skill 市场对接（设计）**：新增 3.10 节，描述对接 Skill 市场获取可选 skill 列表、选择 skill 注入到指定 agent、以及将 skill 下载到约定位置（`configDir/skills/market/<skillId>/`）的实现思路；与 opencode-skill-loader 发现链路衔接、数据模型与 API 抽象、涉及文件与阶段建议。 |
+| 2025-03 | **设计文档与代码一致性**：新增第 11 节「设计文档与代码一致性检查」；修正 3.3 目录为 `src/features/platform-agent/` 并标注当前实现状态。 |
+| 2025-03 | **文档优化**：文档开头增加「文档与实现一致性」说明；3.1/3.2 表格增加「实现状态」列；2 节分层与数据流补充已实现/未实现标注；9.6 小结区分阶段一与阶段二；11.4 增加快速对照说明。 |
+
+---
+
+## 11. 设计文档与代码一致性检查
+
+本节对照设计文档与当前代码，列出**已实现**与**未实现/不一致**项，便于维护与排期。
+
+### 11.1 路径与目录
+
+| 设计文档描述 | 实际代码位置 | 说明 |
+|--------------|--------------|------|
+| `src/platform-agent/` | `src/features/platform-agent/` | 文档 3.3 原写为 `src/platform-agent/`，实际在 `features` 下；已在上文 3.3 中修正说明。 |
+| `src/tools/platform-agent-publish/`、`platform-agent-sync/` | 不存在 | 未实现，见 11.3。 |
+| `src/hooks/platform-agent-version-check/` | 不存在 | 未实现，见 11.3。 |
+
+### 11.2 已实现且与设计一致
+
+| 项目 | 位置 | 说明 |
+|------|------|------|
+| **platform_agent 配置** | `src/config/schema.ts` | `PlatformAgentConfigSchema`：`enabled`、`platforms: ["fuyao","agentcenter"]`。 |
+| **install 默认写入 platform_agent** | `src/cli/model-fallback.ts` | `platform_agent: { enabled: true, platforms: ["fuyao", "agentcenter"] }`。 |
+| **config-handler 拉取与合并** | `src/plugin-handlers/config-handler.ts` | `loadPlatformAgents` 遍历 platforms、调用 `getPlatformAgentList`、`platformAppsToAgentRecord`，与用户 `pluginConfig.agents` 合并（平台为底、用户覆盖）。 |
+| **platform-agent 模块（列表侧）** | `src/features/platform-agent/` | types、api（getPlatformAgentList）、config-bridge（platformAppToOpenCodeAgent、platformAppsToAgentRecord）、platforms/fuyao、agentcenter（getAgentList mock）、index。 |
+| **agents 动态 key 与覆盖** | `src/config/schema.ts` | `AgentOverridesSchema.catchall`、`AgentOverrideConfigSchema` 含 `subagents`、`mcps`；合并顺序与 3.9.2 一致。 |
+| **delegate_task subagents 白名单** | `src/tools/delegate-task/executor.ts` | `resolveSubagentExecution` 中按 parent 的 `subagents`（getSubagentsFromEntry）过滤 callableAgents。 |
+| **平台 agent 的 tool 限制** | `src/shared/agent-tool-restrictions.ts` | 未在表内的 agent 返回 `{}`，平台 agent 等价于默认允许。 |
+| **default_agent 与持久化** | schema、config-handler、persist-default-agent、index 的 message.updated | 与 3.9.4 一致。 |
+| **assets schema** | `assets/fuyao-opencode.schema.json` | 存在。 |
+
+### 11.3 未实现或与设计不一致
+
+| 项目 | 设计文档描述 | 当前代码情况 |
+|------|--------------|--------------|
+| **version-cache** | config-handler 合并后写出版本；读/写按平台分 key；附录 8.4 Step 1–2。 | **未实现**：无 `version-cache.ts`，config-handler 未调用 writeVersionCache。 |
+| **platform_agent_publish / platform_agent_sync** | 以 tool 暴露；可 command 调用。 | **未实现**：无 `platform-agent-publish`、`platform-agent-sync` 工具目录，index 未注册两 tool。 |
+| **platform-publish / platform-sync command** | builtin-commands 增加 `platform-publish`、`platform-sync`；BuiltinCommandName 增加。 | **未实现**：`BuiltinCommandName` 无上述两项，commands 无对应定义。 |
+| **发消息时版本校验 + Toast** | message.updated 时若当前为平台 Agent 且平台有更新则 showToast（附录 8.4 Step 3）。 | **未实现**：index 的 message.updated 仅做 persistDefaultAgent，无平台版本校验与 Toast。 |
+| **publishPlatformAgent / openCodeAgentToPlatformApp** | 发布到平台、OpenCode agent 转平台 body。 | **未实现**：api 仅有 getPlatformAgentList；config-bridge 无 openCodeAgentToPlatformApp。 |
+| **平台适配器 getAgentDetail、publishAgent** | 3.3 与附录 7：详情、发布接口。 | **未实现**：fuyao/agentcenter 适配器仅实现 getAgentList（当前 mock）。 |
+| **constants.ts** | 缓存文件名、API 路径等常量。 | **未实现**：platform-agent 下无 constants.ts。 |
+| **platforms/types.ts** | 3.3 中 platforms 下独立 types。 | **未实现**：无该文件，类型在 `features/platform-agent/types.ts`。 |
+
+### 11.4 小结与建议
+
+- **阶段一（列表拉取、合并、mock、subagents 白名单、agent-tool-restrictions、default_agent 持久化）**：已实现且与设计一致；目录以「实际在 `src/features/platform-agent/`」为准（见 3.3）。
+- **阶段二及以后**：version-cache、发布/同步 tool 与 command、版本校验 Toast、openCodeAgentToPlatformApp / publishPlatformAgent、适配器 getAgentDetail/publishAgent 均未实现；可按 **3.7 实现阶段**与**附录 8.4** 逐步补齐，并同步更新本文档 3.1/3.2/3.3 与本节的实现状态描述。
+
+**快速对照**：文档开头已对「设计 vs 当前实现」做简要说明；详细清单以本节 11.2/11.3 为准。
+
