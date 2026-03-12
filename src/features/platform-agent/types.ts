@@ -27,7 +27,14 @@ export interface GetAgentListOptions {
   offset?: number
 }
 
-/** Adapter per platform: fetches list and maps to PlatformAgentApp[]. Connection/auth inside impl. */
+/** Result of publish (mock or real API). */
+export interface PublishResult {
+  version: string
+}
+
+/** Adapter per platform: list + optional publish. Connection/auth inside impl. */
 export interface IPlatformAdapter {
   getAgentList(options?: GetAgentListOptions): Promise<PlatformAgentApp[]>
+  /** Optional: publish/update app on platform. When absent, api layer mocks success. */
+  publishAgent?(app: PlatformAgentApp): Promise<PublishResult>
 }

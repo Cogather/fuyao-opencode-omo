@@ -51,6 +51,8 @@ export {
   createListAvailableSubagentsTool,
   resolveSubagentAvailabilityConfig,
 } from "./delegate-task"
+export { createPlatformAgentPublishTool } from "./platform-agent-publish"
+export { createPlatformAgentSyncTool } from "./platform-agent-sync"
 
 export function createBackgroundTools(manager: BackgroundManager, client: OpencodeClient): Record<string, ToolDefinition> {
   const outputManager: BackgroundOutputManager = manager

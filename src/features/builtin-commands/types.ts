@@ -8,6 +8,8 @@ export type BuiltinCommandName =
   | "refactor"
   | "start-work"
   | "stop-continuation"
+  | "platform-publish"
+  | "platform-sync"
 
 export interface BuiltinCommandConfig {
   disabled_commands?: BuiltinCommandName[]

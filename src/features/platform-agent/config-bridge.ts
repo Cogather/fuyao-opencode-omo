@@ -44,3 +44,30 @@ export function platformAppsToAgentRecord(
   }
   return record
 }
+
+/**
+ * Convert OpenCode agent entry (key = "platform:name") to PlatformAgentApp for publish body.
+ * Used when publishing local changes (prompt, skills, mcps, subagents) back to platform.
+ */
+export function openCodeAgentToPlatformApp(
+  entry: OpenCodeAgentEntry,
+  platform: PlatformType
+): PlatformAgentApp {
+  const name = entry.name as string
+  const appName = name.includes(":") ? name.slice(name.indexOf(":") + 1) : name
+  const app: PlatformAgentApp = {
+    id: (entry as { id?: string }).id ?? appName,
+    name: appName,
+    version: (entry as { version?: string }).version,
+    prompt: (entry.prompt as string) ?? "",
+    description: (entry.description as string) ?? appName,
+  }
+  if (entry.model) app.model = entry.model as string
+  if (entry.permission && typeof entry.permission === "object")
+    app.permission = entry.permission as Record<string, string>
+  if (Array.isArray(entry.skills)) app.skills = entry.skills as string[]
+  if (Array.isArray(entry.mcps)) app.mcps = entry.mcps as string[]
+  if (Array.isArray(entry.subagents)) app.subagents = entry.subagents as string[]
+  if (entry.mode) app.mode = entry.mode as "subagent" | "primary" | "all"
+  return app
+}

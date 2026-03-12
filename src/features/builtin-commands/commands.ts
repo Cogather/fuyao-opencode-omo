@@ -77,6 +77,28 @@ $ARGUMENTS
 ${STOP_CONTINUATION_TEMPLATE}
 </command-instruction>`,
   },
+  "platform-publish": {
+    description: "(builtin) Publish or update a platform agent (e.g. fuyao:CodeHelper) to the platform",
+    template: `<command-instruction>
+Use the platform_agent_publish tool. Set agent_name to the platform agent key (e.g. fuyao:CodeHelper or agentcenter:Reviewer). Publish merges local config (prompt, skills, mcps, subagents) to the platform and updates local version cache.
+</command-instruction>
+
+<user-request>
+$ARGUMENTS
+</user-request>`,
+    argumentHint: "[agent_name e.g. fuyao:CodeHelper]",
+  },
+  "platform-sync": {
+    description: "(builtin) Sync platform agent versions: compare local cache with platform list; optionally force_refresh to overwrite cache",
+    template: `<command-instruction>
+Use the platform_agent_sync tool. Set platform_type to "fuyao" or "agentcenter". Set force_refresh to true to overwrite local cache with current platform list.
+</command-instruction>
+
+<user-request>
+$ARGUMENTS
+</user-request>`,
+    argumentHint: "[platform_type] [--force-refresh]",
+  },
 }
 
 export function loadBuiltinCommands(

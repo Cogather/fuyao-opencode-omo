@@ -79,6 +79,8 @@ import {
   startTmuxCheck,
   lspManager,
   createTask,
+  createPlatformAgentPublishTool,
+  createPlatformAgentSyncTool,
 } from "./tools";
 import { BackgroundManager } from "./features/background-agent";
 import { SkillMcpManager } from "./features/skill-mcp-manager";
@@ -87,9 +89,23 @@ import { TmuxSessionManager } from "./features/tmux-subagent";
 import { clearBoulderState } from "./features/boulder-state";
 import { type HookName } from "./config";
 import { log, detectExternalNotificationPlugin, getNotificationConflictWarning, resetMessageCursor, hasConnectedProvidersCache, getOpenCodeVersion, isOpenCodeVersionAtLeast, OPENCODE_NATIVE_AGENTS_INJECTION_VERSION, persistDefaultAgent } from "./shared";
+import { getPlatformAgentList, readVersionCache } from "./features/platform-agent";
+import type { PlatformType } from "./features/platform-agent";
 import { loadPluginConfig } from "./plugin-config";
 import { createModelCacheState } from "./plugin-state";
 import { createConfigHandler } from "./plugin-handlers";
+
+/** Debounce: sessionID -> set of platform agent names we already showed version Toast for. */
+const platformVersionToastShown = new Map<string, Set<string>>();
+
+function isPlatformAgentName(agent: string): { platform: PlatformType; appName: string } | null {
+  if (agent.includes(":") && (agent.startsWith("fuyao:") || agent.startsWith("agentcenter:"))) {
+    const platform = agent.startsWith("fuyao:") ? "fuyao" : "agentcenter";
+    const appName = agent.slice(agent.indexOf(":") + 1);
+    return { platform, appName };
+  }
+  return null;
+}
 
 const OhMyOpenCodePlugin: Plugin = async (ctx) => {
   log("[OhMyOpenCodePlugin] ENTRY - plugin loading", { directory: ctx.directory })
@@ -452,12 +468,22 @@ const OhMyOpenCodePlugin: Plugin = async (ctx) => {
 
   const newTaskSystemEnabled = pluginConfig.new_task_system_enabled ?? false;
   const taskTool = newTaskSystemEnabled ? createTask(pluginConfig) : null;
+  const platformAgentPublishTool = createPlatformAgentPublishTool({
+    directory: ctx.directory,
+    pluginConfig,
+  });
+  const platformAgentSyncTool = createPlatformAgentSyncTool({
+    directory: ctx.directory,
+    pluginConfig,
+  });
 
   return {
     tool: {
       ...builtinTools,
       ...backgroundTools,
       call_omo_agent: callOmoAgent,
+      platform_agent_publish: platformAgentPublishTool,
+      platform_agent_sync: platformAgentSyncTool,
       ...(lookAt ? { look_at: lookAt } : {}),
       delegate_task: delegateTask,
       list_available_subagents: listAvailableSubagentsTool,
@@ -623,6 +649,7 @@ const OhMyOpenCodePlugin: Plugin = async (ctx) => {
            setMainSession(undefined);
          }
          if (sessionInfo?.id) {
+           platformVersionToastShown.delete(sessionInfo.id);
            clearSessionAgent(sessionInfo.id);
            resetMessageCursor(sessionInfo.id);
            firstMessageVariantGate.clear(sessionInfo.id);
@@ -643,6 +670,41 @@ const OhMyOpenCodePlugin: Plugin = async (ctx) => {
           updateSessionAgent(sessionID, agent);
           if (sessionID === getMainSessionID()) {
             persistDefaultAgent(agent);
+            // Platform agent version check: if current agent is platform agent and has update, show Toast once per session+agent
+            const pa = pluginConfig.platform_agent;
+            if (pa?.enabled && pa.platforms?.length) {
+              const parsed = isPlatformAgentName(agent);
+              if (parsed && pa.platforms.includes(parsed.platform)) {
+                let shown = platformVersionToastShown.get(sessionID);
+                if (!shown) {
+                  shown = new Set();
+                  platformVersionToastShown.set(sessionID, shown);
+                }
+                if (!shown.has(agent)) {
+                  getPlatformAgentList(parsed.platform)
+                    .then((list) => {
+                      const cached = readVersionCache(parsed.platform, ctx.directory);
+                      const remote = list.find((a) => a.name === parsed!.appName);
+                      const localVer = cached[parsed!.appName] ?? "";
+                      const remoteVer = remote?.version ?? "0";
+                      if (remoteVer !== localVer) {
+                        shown!.add(agent);
+                        ctx.client.tui
+                          .showToast({
+                            body: {
+                              title: "Agent 有更新",
+                              message: `「${agent}」已有新版本，可执行 /platform-sync 更新。`,
+                              variant: "info",
+                              duration: 5000,
+                            },
+                          })
+                          .catch(() => {});
+                      }
+                    })
+                    .catch(() => {});
+                }
+              }
+            }
           }
         }
       }

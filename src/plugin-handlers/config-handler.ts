@@ -32,7 +32,11 @@ import { DEFAULT_CATEGORIES } from "../tools/delegate-task/constants";
 import { resolveSubagentAvailabilityConfig } from "../tools/delegate-task/subagent-availability";
 import type { ModelCacheState } from "../plugin-state";
 import type { CategoryConfig } from "../config/schema";
-import { getPlatformAgentList, platformAppsToAgentRecord } from "../features/platform-agent";
+import {
+  getPlatformAgentList,
+  platformAppsToAgentRecord,
+  writeVersionCache,
+} from "../features/platform-agent";
 import type { PlatformType } from "../features/platform-agent";
 
 /** Ensure subagents is in options so OpenCode (when unmodified) carries it via options merge. */
@@ -79,7 +83,8 @@ function reorderAgentsByPriority(agents: Record<string, unknown>): Record<string
 }
 
 async function loadPlatformAgents(
-  pluginConfig: OhMyOpenCodeConfig
+  pluginConfig: OhMyOpenCodeConfig,
+  directory: string
 ): Promise<Record<string, unknown>> {
   const pa = pluginConfig.platform_agent;
   if (!pa?.enabled || !pa.platforms?.length) return {};
@@ -89,6 +94,10 @@ async function loadPlatformAgents(
       const apps = await getPlatformAgentList(platform);
       const record = platformAppsToAgentRecord(apps, platform);
       Object.assign(out, record);
+      const versionMap = Object.fromEntries(
+        apps.map((a) => [a.name, a.version ?? "0"])
+      );
+      writeVersionCache(platform, versionMap, directory);
     } catch (err) {
       log(`Platform agent list failed for ${platform}`, { error: err });
     }
@@ -396,7 +405,7 @@ export function createConfigHandler(deps: ConfigHandlerDeps) {
         }
       : undefined;
 
-    const platformAgentRecord = await loadPlatformAgents(pluginConfig);
+    const platformAgentRecord = await loadPlatformAgents(pluginConfig, ctx.directory);
     // Manual config overrides runtime: for platform keys merge platform base + user override; other keys are user-only.
     const mergedPlatformAndUser: Record<string, unknown> = { ...platformAgentRecord };
     for (const [key, value] of Object.entries(userAgentOverrides)) {
@@ -420,7 +429,7 @@ export function createConfigHandler(deps: ConfigHandlerDeps) {
       ...(planDemoteConfig ? { plan: planDemoteConfig } : {}),
     };
     } else {
-      const platformAgentRecord = await loadPlatformAgents(pluginConfig);
+      const platformAgentRecord = await loadPlatformAgents(pluginConfig, ctx.directory);
       const userAgentOverridesElse = pluginConfig.agents
         ? Object.fromEntries(
             Object.entries(pluginConfig.agents).map(([key, value]) => [
