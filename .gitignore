@@ -5,10 +5,12 @@ node_modules/
 # Build output
 dist/
 
-# Platform binaries (built, not committed)
+# Platform binaries (built, not committed; exceed GitHub 100MB limit)
 packages/*/bin/oh-my-opencode
 packages/*/bin/oh-my-opencode.exe
-packages/windows-x64/bin/fuyao-opencode.exe
+packages/*/bin/*.exe
+packages/*/bin/fuyao-opencode
+packages/*/bin/fuyao-opencode.exe
 
 # IDE
 .idea/
