@@ -648,6 +648,40 @@ describe("Design doc 6.1 F3 / 6.5 I2 / 6.6 E1 - platform_agent config", () => {
     }
   })
 
+  test("Design doc 3.5: 平台 skill_definitions/mcp_definitions 合并进 config.command 与 config.mcp", async () => {
+    const testDir = join(tmpdir(), `config-handler-35-${Date.now()}`)
+    mkdirSync(testDir, { recursive: true })
+    const pluginConfig: OhMyOpenCodeConfig = {
+      platform_agent: { enabled: true, platforms: ["fuyao"] },
+    }
+    const config: Record<string, unknown> = {
+      model: "anthropic/claude-opus-4-5",
+      agent: {},
+    }
+    const handler = createConfigHandler({
+      ctx: { directory: testDir },
+      pluginConfig,
+      modelCacheState: {
+        anthropicContext1MEnabled: false,
+        modelContextLimitsCache: new Map(),
+      },
+    })
+    await handler(config)
+    const commands = config.command as Record<string, Record<string, unknown>>
+    const mcps = config.mcp as Record<string, Record<string, unknown>>
+    expect(commands["platform-code-review"]).toBeDefined()
+    expect(commands["platform-code-review"].name).toBe("platform-code-review")
+    expect(commands["platform-doc-skill"]).toBeDefined()
+    expect(commands["platform-doc-skill"].name).toBe("platform-doc-skill")
+    expect(mcps["platform-helper-mcp"]).toBeDefined()
+    expect(mcps["platform-helper-mcp"].type).toBe("remote")
+    try {
+      rmSync(testDir, { recursive: true })
+    } catch {
+      // ignore
+    }
+  })
+
   test("E1: getPlatformAgentList 失败时 config-handler 不崩溃、该平台不合并", async () => {
     const testDir = join(tmpdir(), `config-handler-e1-${Date.now()}`)
     mkdirSync(testDir, { recursive: true })

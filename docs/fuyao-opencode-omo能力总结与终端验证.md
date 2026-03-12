@@ -19,6 +19,7 @@
 | 能力 | 说明 |
 |------|------|
 | **动态拉取平台 Agent** | 启动/刷新时从配置的 `platform_agent.platforms`（fuyao / agentcenter）拉取应用列表，合并进 OpenCode 的 agent 列表；当前为 **Mock 数据**，真实对接后替换适配器。 |
+| **平台下发的 skill/MCP 定义合并** | 平台应用可带 `skill_definitions`、`mcp_definitions`；拉取时自动合并进 `config.command`、`config.mcp`，无需本地或市场已有同名项即可使用（Mock 中 CodeHelper 等已带示例）。 |
 | **平台 Agent 与主/子 Agent 一致使用** | 平台 Agent 以 `fuyao:CodeHelper`、`agentcenter:Reviewer` 等形式出现在 Agent 列表，可与内置 Agent 一样被选中、发消息、使用 skill/MCP。 |
 | **用户覆盖** | 在配置 `agents` 中手写 `fuyao:CodeHelper` 等 key，可覆盖平台拉取的 prompt、skills、mcps、subagents。 |
 | **发布到平台** | 将当前本地配置（含 prompt、skills、mcps、subagents）发布/更新到平台（当前 Mock 成功）。 |
@@ -78,6 +79,12 @@
 - **操作**：在 Agent 下拉中选择 **fuyao:CodeHelper**（或任意平台 Agent），在输入框发一条普通消息，例如：「简单介绍一下你自己」。
 - **预期**：该 Agent 按 mock 系统提示词回复；行为与内置 Agent 一致。
 - **顺带验证**：主会话下首次用该 Agent 发消息后，`default_agent` 会被写回配置（下次启动会默认选中该 Agent，若需验证可重启 OpenCode 或查看配置文件）。
+
+### 2.1 验证「平台下发的 skill/MCP 定义合并进 config」
+
+- **说明**：平台应用可携带 `skill_definitions`、`mcp_definitions`；拉取时插件会将其合并进 OpenCode 的 `config.command`、`config.mcp`，无需本地已有同名 skill/MCP 即可被该 agent 使用。
+- **操作**：启用平台 Agent（`platform_agent.enabled: true`、`platforms: ["fuyao"]`）并打开会话后，可在调试或单元测试中确认：config-handler 执行后，`config.command` 包含平台下发的 skill 定义（如 mock 中的 `platform-code-review`、`platform-doc-skill`），`config.mcp` 包含平台下发的 MCP 配置（如 mock 中的 `platform-helper-mcp`）。
+- **终端/对话验证**：选择 **fuyao:CodeHelper** 后，询问「我可以用哪些 skill？」并让 Agent 调用 `list_available_skills`；列表中应包含平台下发的 skill（如 `platform-code-review`），说明已合并进 config 并被发现。
 
 ### 3. 验证「平台同步」/platform-sync
 

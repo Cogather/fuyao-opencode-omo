@@ -238,11 +238,27 @@ src/
 
 ### 3.5 平台 Agent 的 skill / MCP / subagent
 
-- **数据模型**：平台应用含 skills、mcps、subagents（均为字符串数组）；对应 config.command、config.mcp、以及 delegate_task 可调列表。
-- **拉取**：`platformAppToOpenCodeAgent` 将上述字段写入 agent 配置并合并进 config.agent/command/mcp。
+- **数据模型**：平台应用含 skills、mcps、subagents（均为字符串数组）；可选带 `skill_definitions`（名→OpenCode skill 定义）、`mcp_definitions`（名→MCP 服务配置），对应 config.command、config.mcp、以及 delegate_task 可调列表。
+- **拉取**：`platformAppToOpenCodeAgent` 将 skills/mcps/subagents 写入 agent 配置；`loadPlatformAgents` 汇总各应用的 `skill_definitions`/`mcp_definitions`，在 config-handler 中合并进 config.agent、config.command、config.mcp。
 - **发布**：`openCodeAgentToPlatformApp` 从 config 收集该 agent 的 skills/mcps/subagents，组进发布 body；publish tool 调用 `publishPlatformAgent`。
 - **Skill 来源扩展**：skills 除平台拉取与用户手配外，可来自 **Skill 市场**——从市场获取可选 skill 列表、选择后注入到指定 agent，并将 skill 下载到约定位置供 OMO 读取。详见 **3.10 Skill 市场对接**。
 - **涉及文件**：types、config-bridge、config-handler、platform-agent-publish、platforms/*。
+
+**3.5 条目的实现逐项确认**：
+
+| 3.5 描述 | 是否具备 | 实现位置与说明 |
+|----------|----------|----------------|
+| **数据模型：平台应用含 skills、mcps、subagents（字符串数组）** | ✓ 具备 | `PlatformAgentApp`（types.ts）含 `skills?`、`mcps?`、`subagents?`；mock-data 已带 subagents，skills/mcps 可选。 |
+| **拉取：platformAppToOpenCodeAgent 将上述字段写入 agent 配置** | ✓ 具备 | config-bridge.ts：`platformAppToOpenCodeAgent` 将 `app.skills`、`app.mcps`、`app.subagents` 写入 entry（26–28 行）；`platformAppsToAgentRecord` 生成整表。 |
+| **拉取：合并进 config.agent** | ✓ 具备 | config-handler.ts：`loadPlatformAgents` 得到 record，与用户覆盖合并后写入 `config.agent`（mergedPlatformAndUser → config.agent）。 |
+| **拉取：合并进 config.command / config.mcp** | ✓ 具备 | 平台应用可选带 `skill_definitions`、`mcp_definitions`（名→定义）；`loadPlatformAgents` 汇总后通过 `PlatformLoadResult.platformCommandAdditions` / `platformMcpAdditions` 在 config-handler 中合并进 `config.command`、`config.mcp`。mock-data 中 CodeHelper/DocAgent 已带示例定义。 |
+| **拉取：subagents 写入后本地可解析** | ✓ 具备 | 子 agent 与主 agent 同批拉取并进入 config.agent；config-handler 中 `ensureSubagentsInOptions` 将 subagents 写入 entry.options，供 delegate_task 使用。 |
+| **发布：openCodeAgentToPlatformApp 收集 skills/mcps/subagents 组进 body** | ✓ 具备 | config-bridge.ts：`openCodeAgentToPlatformApp` 将 entry.skills、entry.mcps、entry.subagents 写入 app（67–70 行）。 |
+| **发布：publish tool 调用 publishPlatformAgent** | ✓ 具备 | platform-agent-publish/tools.ts：构建 entry 后调用 `openCodeAgentToPlatformApp(entry, platform)`，再 `publishPlatformAgent(platform, app)`；含 base + userOverride 合并。 |
+| **Skill 来源扩展：市场注入到 agent 并写回配置** | ✓ 具备 | persistAgentSkill、skill_inject_to_agent tool、opencode-skill-loader 扫描 market 目录；见 3.10、11.5。 |
+| **涉及文件 types、config-bridge、config-handler、platform-agent-publish、platforms/\*** | ✓ 具备 | 上述文件均存在且参与拉取/合并/发布链路。 |
+
+**小结**：3.5 所述平台应用处理逻辑与功能均已具备：数据模型（含可选 `skill_definitions`、`mcp_definitions`）、拉取写入 agent 配置并合并进 config.agent、**拉取时将平台下发的 skill/MCP 定义合并进 config.command / config.mcp**、subagents 本地可解析、发布 body 与 publish 调用、Skill 市场扩展；涉及 types、config-bridge、config-handler（含 `PlatformLoadResult` 与合并顺序）、platform-agent-publish、platforms/*。
 
 ### 3.6 Subagent 多层调用
 

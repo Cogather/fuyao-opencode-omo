@@ -82,18 +82,39 @@ function reorderAgentsByPriority(agents: Record<string, unknown>): Record<string
   return ordered;
 }
 
+export interface PlatformLoadResult {
+  agentRecord: Record<string, unknown>;
+  platformCommandAdditions: Record<string, unknown>;
+  platformMcpAdditions: Record<string, unknown>;
+}
+
 async function loadPlatformAgents(
   pluginConfig: OhMyOpenCodeConfig,
   directory: string
-): Promise<Record<string, unknown>> {
+): Promise<PlatformLoadResult> {
+  const empty: PlatformLoadResult = {
+    agentRecord: {},
+    platformCommandAdditions: {},
+    platformMcpAdditions: {},
+  };
   const pa = pluginConfig.platform_agent;
-  if (!pa?.enabled || !pa.platforms?.length) return {};
-  const out: Record<string, unknown> = {};
+  if (!pa?.enabled || !pa.platforms?.length) return empty;
+  const agentRecord: Record<string, unknown> = {};
+  const platformCommandAdditions: Record<string, unknown> = {};
+  const platformMcpAdditions: Record<string, unknown> = {};
   for (const platform of pa.platforms as PlatformType[]) {
     try {
       const apps = await getPlatformAgentList(platform);
       const record = platformAppsToAgentRecord(apps, platform);
-      Object.assign(out, record);
+      Object.assign(agentRecord, record);
+      for (const app of apps) {
+        if (app.skill_definitions && Object.keys(app.skill_definitions).length > 0) {
+          Object.assign(platformCommandAdditions, app.skill_definitions);
+        }
+        if (app.mcp_definitions && Object.keys(app.mcp_definitions).length > 0) {
+          Object.assign(platformMcpAdditions, app.mcp_definitions);
+        }
+      }
       const versionMap = Object.fromEntries(
         apps.map((a) => [a.name, a.version ?? "0"])
       );
@@ -102,7 +123,7 @@ async function loadPlatformAgents(
       log(`Platform agent list failed for ${platform}`, { error: err });
     }
   }
-  return out;
+  return { agentRecord, platformCommandAdditions, platformMcpAdditions };
 }
 
 export function createConfigHandler(deps: ConfigHandlerDeps) {
@@ -248,6 +269,11 @@ export function createConfigHandler(deps: ConfigHandlerDeps) {
       sisyphus?: { tools?: Record<string, unknown> };
     };
     const configAgent = config.agent as AgentConfig | undefined;
+
+    const platformLoadResult =
+      pluginConfig.platform_agent?.enabled && pluginConfig.platform_agent?.platforms?.length
+        ? await loadPlatformAgents(pluginConfig, ctx.directory)
+        : { agentRecord: {}, platformCommandAdditions: {}, platformMcpAdditions: {} };
 
     if (isSisyphusEnabled && builtinAgents.sisyphus) {
 
@@ -405,7 +431,7 @@ export function createConfigHandler(deps: ConfigHandlerDeps) {
         }
       : undefined;
 
-    const platformAgentRecord = await loadPlatformAgents(pluginConfig, ctx.directory);
+    const platformAgentRecord = platformLoadResult.agentRecord;
     // Manual config overrides runtime: for platform keys merge platform base + user override; other keys are user-only.
     const mergedPlatformAndUser: Record<string, unknown> = { ...platformAgentRecord };
     for (const [key, value] of Object.entries(userAgentOverrides)) {
@@ -429,7 +455,7 @@ export function createConfigHandler(deps: ConfigHandlerDeps) {
       ...(planDemoteConfig ? { plan: planDemoteConfig } : {}),
     };
     } else {
-      const platformAgentRecord = await loadPlatformAgents(pluginConfig, ctx.directory);
+      const platformAgentRecord = platformLoadResult.agentRecord;
       const userAgentOverridesElse = pluginConfig.agents
         ? Object.fromEntries(
             Object.entries(pluginConfig.agents).map(([key, value]) => [
@@ -530,6 +556,7 @@ export function createConfigHandler(deps: ConfigHandlerDeps) {
       ...createBuiltinMcps(pluginConfig.disabled_mcps),
       ...(config.mcp as Record<string, unknown>),
       ...mcpResult.servers,
+      ...platformLoadResult.platformMcpAdditions,
       ...pluginComponents.mcpServers,
     };
 
@@ -559,6 +586,7 @@ export function createConfigHandler(deps: ConfigHandlerDeps) {
       ...userCommands,
       ...opencodeGlobalCommands,
       ...systemCommands,
+      ...platformLoadResult.platformCommandAdditions,
       ...projectCommands,
       ...opencodeProjectCommands,
       ...pluginComponents.commands,

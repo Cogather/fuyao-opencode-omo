@@ -19,6 +19,16 @@ export interface PlatformAgentApp {
   /** OpenCode agent mode: subagent 仅作为子 agent 被引用，不单独出现在主列表 */
   mode?: "subagent" | "primary" | "all"
   description?: string
+  /**
+   * Optional skill definitions from platform: name -> OpenCode command/skill definition (name, description, template, etc.).
+   * When present, merged into config.command so platform-pulled agents can use skills without local/market copy.
+   */
+  skill_definitions?: Record<string, Record<string, unknown>>
+  /**
+   * Optional MCP definitions from platform: name -> MCP server config (e.g. { type: "remote", url, enabled }).
+   * When present, merged into config.mcp so platform-pulled agents can use MCPs without local config.
+   */
+  mcp_definitions?: Record<string, Record<string, unknown>>
 }
 
 export interface GetAgentListOptions {

@@ -12,6 +12,21 @@ const FUYAO_MOCK_SYSTEM_PROMPT = `You are a Fuyao platform agent. Follow user in
 /** Mock system prompt from SDK / platform for agentcenter agents. */
 const AGENTCENTER_MOCK_SYSTEM_PROMPT = `You are an AgentCenter platform agent. Assist the user with their requests using the provided tools and context.`
 
+/** Mock skill definition shape for platform-pulled config.command merge (design doc 3.5). */
+const MOCK_PLATFORM_SKILL = {
+  name: "platform-code-review",
+  description: "Platform-provided code review skill (mock).",
+  template: "# Platform Code Review\n\nUse for quick code review when this agent is selected.",
+} as const;
+
+/** Mock MCP definition shape for platform-pulled config.mcp merge (design doc 3.5). */
+const MOCK_PLATFORM_MCP = {
+  type: "remote" as const,
+  url: "https://mock-platform-mcp.example.com/mcp",
+  enabled: true,
+  oauth: false as const,
+};
+
 export const MOCK_FUYAO_AGENTS: PlatformAgentApp[] = [
   {
     id: "fuyao-code-helper",
@@ -21,6 +36,14 @@ export const MOCK_FUYAO_AGENTS: PlatformAgentApp[] = [
     model: undefined,
     description: "扶摇代码助手（Mock）",
     subagents: ["fuyao:CodeReviewer", "fuyao:TestWriter", "fuyao:RefactorHelper"],
+    skills: ["platform-code-review"],
+    skill_definitions: {
+      "platform-code-review": { ...MOCK_PLATFORM_SKILL },
+    },
+    mcps: ["platform-helper-mcp"],
+    mcp_definitions: {
+      "platform-helper-mcp": { ...MOCK_PLATFORM_MCP },
+    },
   },
   {
     id: "fuyao-doc-agent",
@@ -29,6 +52,14 @@ export const MOCK_FUYAO_AGENTS: PlatformAgentApp[] = [
     prompt: FUYAO_MOCK_SYSTEM_PROMPT + "\nFocus: documentation and comments.",
     description: "扶摇文档助手（Mock）",
     subagents: ["fuyao:DocReviewer"],
+    skills: ["platform-doc-skill"],
+    skill_definitions: {
+      "platform-doc-skill": {
+        name: "platform-doc-skill",
+        description: "Platform doc skill (mock).",
+        template: "# Platform Doc\n\nUse for documentation tasks.",
+      },
+    },
   },
   // 子 agent：仅作为主 agent 的子能力被引用
   {
