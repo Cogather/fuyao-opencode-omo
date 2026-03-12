@@ -8,6 +8,7 @@ dist/
 # Platform binaries (built, not committed)
 packages/*/bin/oh-my-opencode
 packages/*/bin/oh-my-opencode.exe
+packages/windows-x64/bin/fuyao-opencode.exe
 
 # IDE
 .idea/
