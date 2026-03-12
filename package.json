@@ -29,7 +29,9 @@
     "postinstall": "node postinstall.mjs",
     "prepublishOnly": "bun run clean && bun run build",
     "typecheck": "tsc --noEmit",
-    "test": "bun test"
+    "test": "bun test",
+    "test:design-doc": "bun test src/features/platform-agent/ src/features/builtin-commands/commands.test.ts src/shared/persist-agent-skill.test.ts",
+    "test:design-doc-full": "bun test src/features/platform-agent/ src/features/builtin-commands/commands.test.ts src/shared/persist-agent-skill.test.ts src/shared/persist-default-agent.test.ts src/features/skill-market/api.test.ts src/tools/skill-inject-to-agent/tools.test.ts"
   },
   "keywords": [
     "opencode",

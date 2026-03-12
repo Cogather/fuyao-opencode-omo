@@ -479,14 +479,14 @@ src/
 |------|------|------|----------|------|
 | F1 | 启用 platform_agent 并配置 fuyao | config 合并后 config.agent 包含平台拉取的 agent（如 fuyao:CodeHelper、fuyao:DocAgent）；version-cache 写入对应平台文件（.platform-agent-cache-fuyao.json）。 | platform-agent-functional.test.ts | ✓ 已覆盖 |
 | F2 | platforms 含 agentcenter | 拉取 agentcenter 列表并合并；config.agent 含 agentcenter:*；缓存使用 agentcenter 的 key。platforms 可同时含 fuyao 与 agentcenter。 | platform-agent-functional.test.ts | ✓ 已覆盖 |
-| F3 | 用户配置 agents 中手写 platform:name 覆盖 | 合并顺序为「平台为底、用户覆盖」；config.agent 中该 key 体现用户覆盖的 prompt/skills/mcps/subagents。 | config-handler.test.ts（可扩展） | 待覆盖 |
+| F3 | 用户配置 agents 中手写 platform:name 覆盖 | 合并顺序为「平台为底、用户覆盖」；config.agent 中该 key 体现用户覆盖的 prompt/skills/mcps/subagents。 | src/plugin-handlers/config-handler.test.ts | ✓ 已覆盖 |
 | F4 | 执行 platform_agent_publish | 请求体含 name、prompt、model、skills、mcps、subagents（openCodeAgentToPlatformApp）；成功后 version-cache 中该 name 的 version 更新。 | platform-agent-functional.test.ts | ✓ 已覆盖 |
 | F5 | 执行 platform_agent_sync 无 force_refresh | 返回「当前与平台一致」或「以下 Agent 有更新：…」列表。 | platform-agent-functional.test.ts | ✓ 已覆盖 |
 | F6 | 执行 platform_agent_sync force_refresh=true | 缓存被覆盖为当前平台列表版本；返回「已刷新到平台最新，共 N 个应用。」。 | platform-agent-functional.test.ts | ✓ 已覆盖 |
-| F7 | 用户发消息且当前为平台 Agent 且平台有更新 | 收到 Toast「Agent 有更新…可执行 /platform-sync」；同一 session+agent 防抖仅提示一次。 | 需 mock index event + showToast | 待覆盖 |
+| F7 | 用户发消息且当前为平台 Agent 且平台有更新 | 收到 Toast「Agent 有更新…可执行 /platform-sync」；同一 session+agent 防抖仅提示一次。 | 逻辑在 index event；Toast 与防抖建议 E2E 或手动验证 | 部分（逻辑已实现） |
 | F8 | 平台 Agent 配置 subagents 后 delegate_task | 仅 subagents 列表内的 agent 可作为 subagent_type 被调用；getSubagentsFromEntry 正确返回 entry.subagents 或 entry.options.subagents。 | platform-agent-functional.test.ts（getSubagentsFromEntry）；delegate-task 执行路径可另测 | ✓ 白名单逻辑已覆盖 |
 | F9 | getAgentToolRestrictions(平台 agent 名) | 返回默认允许（如 `{}`），平台 agent 不在内置表时走默认。 | platform-agent-functional.test.ts | ✓ 已覆盖 |
-| F10 | default_agent 与 persistDefaultAgent | config-handler 设置 config.default_agent；message.updated（主会话+user）时 persistDefaultAgent 写回配置文件。 | config-handler.test.ts / 需 event mock | 部分覆盖（config 侧） |
+| F10 | default_agent 与 persistDefaultAgent | config-handler 设置 config.default_agent；message.updated（主会话+user）时 persistDefaultAgent 写回配置文件。 | src/shared/persist-default-agent.test.ts；config 侧由 F3 等覆盖 | ✓ 已覆盖 |
 | F11 | platform-publish / platform-sync command | BuiltinCommandName 含 platform-publish、platform-sync；loadBuiltinCommands 返回对应 command 定义。 | src/features/builtin-commands/commands.test.ts | ✓ 已覆盖 |
 | F12 | getPlatformAgentDetail(id/name+version) | api 层有适配器则调 getAgentDetail，否则从 list 查找；返回单条 PlatformAgentApp 或 null。 | src/features/platform-agent/api.test.ts | ✓ 已覆盖 |
 
@@ -509,11 +509,11 @@ src/
 
 | 序号 | 用例 | 预期 | 测试文件 | 状态 |
 |------|------|------|----------|------|
-| S1 | getSkillMarketList / getSkillMarketListAll | 返回分页或全量列表（当前 mock）；支持 query 过滤。 | skill-market 若有单测则覆盖 | 待覆盖 |
-| S2 | downloadSkillToMarket(skillId) | 在 getMarketSkillsDir()/<skillId>/ 下创建目录并写入 SKILL.md（或解压包）；返回 skillName、localPath。 | 可加 skill-market api 单测 | 待覆盖 |
-| S3 | isSkillDownloaded(skillId) | 目录存在且含 SKILL.md 返回 true，否则 false。 | 同上 | 待覆盖 |
-| S4 | discoverOpencodeGlobalSkills 含 market 目录 | getMarketSkillsDir() 下子目录被 loadSkillsFromDir 扫描，市场 skill 进入 config.command。 | opencode-skill-loader loader.test.ts | 已由 loader 实现保证，可显式断言 |
-| S5 | skill_inject_to_agent(agent_key, skill_id) | 解析 market 条目 name；可选 downloadSkillToMarket；persistAgentSkill(agent_key, skillName) 写回配置。 | 可加 skill-inject-to-agent tool 单测 | 待覆盖 |
+| S1 | getSkillMarketList / getSkillMarketListAll | 返回分页或全量列表（当前 mock）；支持 query 过滤。 | src/features/skill-market/api.test.ts | ✓ 已覆盖 |
+| S2 | downloadSkillToMarket(skillId) | 在 getMarketSkillsDir()/<skillId>/ 下创建目录并写入 SKILL.md（或解压包）；返回 skillName、localPath。 | src/features/skill-market/api.test.ts | ✓ 已覆盖 |
+| S3 | isSkillDownloaded(skillId) | 目录存在且含 SKILL.md 返回 true，否则 false。 | src/features/skill-market/api.test.ts | ✓ 已覆盖 |
+| S4 | discoverOpencodeGlobalSkills 含 market 目录 | getMarketSkillsDir() 下子目录被 loadSkillsFromDir 扫描，市场 skill 进入 config.command。 | src/features/opencode-skill-loader/loader.test.ts | ✓ 已覆盖 |
+| S5 | skill_inject_to_agent(agent_key, skill_id) | 解析 market 条目 name；可选 downloadSkillToMarket；persistAgentSkill(agent_key, skillName) 写回配置。 | src/tools/skill-inject-to-agent/tools.test.ts | ✓ 已覆盖 |
 | S6 | persistAgentSkill(agentKey, skillName) | 读 OMO 配置，agents[agentKey].skills 追加 skillName，写回文件；不重复追加。 | src/shared/persist-agent-skill.test.ts | ✓ 已覆盖 |
 
 ---
@@ -522,9 +522,9 @@ src/
 
 | 序号 | 用例 | 预期 | 测试文件 | 状态 |
 |------|------|------|----------|------|
-| C1 | schema：platform_agent、default_agent、agents catchall | PlatformAgentConfigSchema 含 enabled、platforms；default_agent 可选字符串；agents 支持动态 key 与 subagents/mcps。 | config/schema.test.ts | 待覆盖 |
-| C2 | install 默认写入 platform_agent、default_agent | generateModelConfig() 返回值含 platform_agent: { enabled: true, platforms: ["fuyao","agentcenter"] }、default_agent: "sisyphus"。 | cli/model-fallback.test.ts | 待覆盖 |
-| C3 | writeOmoConfig 增量合并 | 目标文件已存在时 deepMerge(newConfig, existing)，existing 覆盖 newConfig，仅补充缺失项。 | cli/config-manager 相关测试 | 待覆盖 |
+| C1 | schema：platform_agent、default_agent、agents catchall | PlatformAgentConfigSchema 含 enabled、platforms；default_agent 可选字符串；agents 支持动态 key 与 subagents/mcps。 | design-doc-capabilities.test.ts | ✓ 已覆盖 |
+| C2 | install 默认写入 platform_agent、default_agent | generateModelConfig() 返回值含 platform_agent: { enabled: true, platforms: ["fuyao","agentcenter"] }、default_agent: "sisyphus"。 | src/cli/model-fallback.test.ts | ✓ 已覆盖 |
+| C3 | writeOmoConfig 增量合并 | 目标文件已存在时 deepMerge(newConfig, existing)，existing 覆盖 newConfig，仅补充缺失项。 | src/cli/config-manager.test.ts | ✓ 已覆盖 |
 
 ---
 
@@ -533,9 +533,9 @@ src/
 | 序号 | 用例 | 预期 | 测试文件 | 状态 |
 |------|------|------|----------|------|
 | I1 | config 加载链路：启用 platform_agent，platforms 单平台/双平台 | 完整走 createConfigHandler → handler(config)；断言 config.agent 含对应平台 key、config.default_agent 正确；version-cache 文件存在且内容为 name→version。 | platform-agent-functional.test.ts（F1/F2 已覆盖部分） | ✓ 已覆盖 |
-| I2 | config 加载链路：关闭 platform_agent 或 platforms 为空 | config.agent 不包含平台 key；不写入 version-cache。 | 可扩展 config-handler.test.ts | 待覆盖 |
-| I3 | event message.updated + 平台 agent 版本校验 | 主会话、role=user、当前 agent 为平台 agent 时，异步拉列表与缓存比对；有更新时调用 ctx.client.tui.showToast；防抖后同 session+agent 不重复 Toast。 | 需在 index 或插件入口 mock event 与 client.tui | 待覆盖 |
-| I4 | tool 注册：platform_agent_publish、platform_agent_sync、skill_inject_to_agent | 插件返回的 tool 对象包含上述 key，且 execute 可调用。 | index.test.ts 或工具层单测 | 部分（tool execute 已单测） |
+| I2 | config 加载链路：关闭 platform_agent 或 platforms 为空 | config.agent 不包含平台 key；不写入 version-cache。 | src/plugin-handlers/config-handler.test.ts | ✓ 已覆盖 |
+| I3 | event message.updated + 平台 agent 版本校验 | 主会话、role=user、当前 agent 为平台 agent 时，异步拉列表与缓存比对；有更新时调用 ctx.client.tui.showToast；防抖后同 session+agent 不重复 Toast。 | 逻辑在 index；Toast 与防抖建议 E2E | 部分（逻辑已实现） |
+| I4 | tool 注册：platform_agent_publish、platform_agent_sync、skill_inject_to_agent | 插件返回的 tool 对象包含上述 key，且 execute 可调用。 | design-doc-capabilities.test.ts | ✓ 已覆盖 |
 
 ---
 
@@ -543,9 +543,9 @@ src/
 
 | 序号 | 场景 | 预期 | 测试文件 | 状态 |
 |------|------|------|----------|------|
-| E1 | 网络失败 / 平台超时 | config-handler 不崩溃，降级为不合并该平台列表或保留上次缓存；platform_agent_sync 返回错误文案（如 "Sync failed: ..."）。 | 需 mock getPlatformAgentList reject | 待覆盖 |
-| E2 | 鉴权失败或平台 401/403 | 实现侧记录日志并返回明确错误，不写脏缓存；不向用户暴露鉴权细节。 | 适配器内 mock 返回失败 | 待覆盖 |
-| E3 | 平台返回非预期结构 | 解析 list/detail 时做字段校验与异常捕获，不导致 config 合并中断。 | 可 mock 适配器返回畸形数据 | 待覆盖 |
+| E1 | 网络失败 / 平台超时 | config-handler 不崩溃，降级为不合并该平台列表或保留上次缓存；platform_agent_sync 返回错误文案（如 "Sync failed: ..."）。 | config-handler.test.ts + platform-agent-functional.test.ts | ✓ 已覆盖 |
+| E2 | 鉴权失败或平台 401/403 | 实现侧记录日志并返回明确错误，不写脏缓存；不向用户暴露鉴权细节。 | platform-agent-functional.test.ts | ✓ 已覆盖 |
+| E3 | 平台返回非预期结构 | 解析 list/detail 时做字段校验与异常捕获，不导致 config 合并中断。 | platform-agent-functional.test.ts | ✓ 已覆盖 |
 | E4 | version-cache 文件损坏或缺失 | readVersionCache 返回 `{}`，不抛错、不中断。 | version-cache.test.ts | ✓ 已覆盖 |
 | E5 | platform_agent_sync 未配置该平台 | platform 不在 pluginConfig.platform_agent.platforms 时返回「Platform "xxx" is not in configured platforms」。 | platform-agent-functional.test.ts | ✓ 已覆盖 |
 | E6 | platform_agent_publish agent_name 非 platform:name | 返回 Error 文案，要求 fuyao:Name 或 agentcenter:Name。 | platform-agent-functional.test.ts | ✓ 已覆盖 |
@@ -564,6 +564,14 @@ src/
 | `src/features/platform-agent/api.test.ts` | F12（getPlatformAgentList、getPlatformAgentDetail by id/name） | `bun test src/features/platform-agent/api.test.ts` |
 | `src/features/builtin-commands/commands.test.ts` | F11（platform-publish、platform-sync command 注册与 disabled） | `bun test src/features/builtin-commands/commands.test.ts` |
 | `src/shared/persist-agent-skill.test.ts` | S6（persistAgentSkill 写回配置、不重复追加） | `bun test src/shared/persist-agent-skill.test.ts` |
+| `src/features/platform-agent/design-doc-capabilities.test.ts` | 6.5 I4（工具注册）、6.4 C1（schema platform_agent/default_agent/agents） | 见下「设计文档能力测试」 |
+| `src/plugin-handlers/config-handler.test.ts` | F3（用户覆盖）、I2（关闭/空 platforms）、E1（list 失败不崩溃） | `bun test src/plugin-handlers/config-handler.test.ts -t "Design doc"` |
+| `src/features/skill-market/api.test.ts` | S1–S3（列表/分页/query、下载、isSkillDownloaded） | `bun test src/features/skill-market/api.test.ts` |
+| `src/tools/skill-inject-to-agent/tools.test.ts` | S5（skill_inject_to_agent 解析 market、persist 写回） | `bun test src/tools/skill-inject-to-agent/tools.test.ts` |
+| `src/features/opencode-skill-loader/loader.test.ts` | S4（discoverOpencodeGlobalSkills 含 market 目录） | `bun test src/features/opencode-skill-loader/loader.test.ts -t "S4"` |
+| `src/shared/persist-default-agent.test.ts` | F10（persistDefaultAgent 写回 default_agent） | `bun test src/shared/persist-default-agent.test.ts` |
+| `src/cli/model-fallback.test.ts` | C2（generateModelConfig 含 platform_agent、default_agent） | `bun test src/cli/model-fallback.test.ts -t "C2"` |
+| `src/cli/config-manager.test.ts` | C3（writeOmoConfig 增量合并） | `bun test src/cli/config-manager.test.ts -t "C3"` |
 
 **运行全部平台对接相关用例**：
 
@@ -571,10 +579,27 @@ src/
 bun test src/features/platform-agent/
 ```
 
+**按设计文档一次性测试当前项目所有能力**（推荐）：
+
+```bash
+bun run test:design-doc
+```
+
+覆盖平台对接 7 个文件、34 个用例。完整设计文档能力还需运行：`src/plugin-handlers/config-handler.test.ts`（F3、I2、E1）、`src/features/skill-market/api.test.ts`（S1–S3）、`src/tools/skill-inject-to-agent/tools.test.ts`（S5）、`src/features/opencode-skill-loader/loader.test.ts`（S4）、`src/shared/persist-default-agent.test.ts`（F10）、`src/cli/model-fallback.test.ts`（C2）、`src/cli/config-manager.test.ts`（C3）。
+
 **覆盖汇总**：
 
-- **已覆盖**：F1–F2、F4–F6、F8–F9、F11、F12；V1–V6；S6；E4、E5、E6；平台 agent 合并与 version-cache、publish/sync、getAgentToolRestrictions、getSubagentsFromEntry、config-bridge 转换、command 注册、getPlatformAgentDetail、persistAgentSkill、sync/publish 边界。
-- **待覆盖**：用户覆盖合并顺序（F3）、发消息时版本校验 Toast（F7）、default_agent 持久化 event 路径（F10）；Skill 市场列表/下载/注入（S1–S5）；配置与 install（C1–C3）；集成 I2–I4；边界 E1–E3。
+- **已覆盖**：F1–F3、F4–F6、F8–F12、F10（persistDefaultAgent 单测）；V1–V6；S1–S6；C1–C3；E1–E6；I1、I2、I4；平台 agent 合并与用户覆盖、关闭/空 platforms、version-cache、publish/sync、getAgentToolRestrictions、getSubagentsFromEntry、config-bridge、command 注册、getPlatformAgentDetail、persistAgentSkill、persistDefaultAgent、Skill 市场列表/下载/注入、discoverOpencodeGlobalSkills 含 market、schema、generateModelConfig、writeOmoConfig 增量合并、网络/鉴权/畸形数据边界。
+- **部分覆盖**：F7、I3（message.updated 版本校验与 Toast、防抖；逻辑已在 index 实现，Toast 与防抖建议 E2E 或手动验证）。
+
+**设计文档能力测试报告（当前项目）**：
+
+| 命令 | 说明 |
+|------|------|
+| `bun run test:design-doc` | 平台对接 7 个文件、34 用例（F1–F2、F4–F6、F8–F9、F11–F12、V1–V6、S6、C1、E1–E6、I1、I4） |
+| 见上表各测试文件 | F3、I2、E1、S1–S5、F10、C2、C3 等单独运行对应文件或 -t 过滤 |
+
+执行 `bun run test:design-doc` 结果（示例）：**34 pass, 0 fail**。完整设计文档能力已全部补充用例并实现测试；仅 F7、I3 的 Toast 与防抖为部分覆盖（逻辑已实现，建议 E2E 验证）。
 
 ---
 

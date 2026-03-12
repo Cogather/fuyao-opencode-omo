@@ -18,6 +18,21 @@ function createConfig(overrides: Partial<InstallConfig> = {}): InstallConfig {
 }
 
 describe("generateModelConfig", () => {
+  describe("Design doc 6.4 C2 - install 默认写入 platform_agent、default_agent", () => {
+    test("返回值含 platform_agent: { enabled: true, platforms: [fuyao, agentcenter] }、default_agent: sisyphus", () => {
+      const config = createConfig({ hasClaude: true })
+      const result = generateModelConfig(config)
+      expect(result.platform_agent).toEqual({ enabled: true, platforms: ["fuyao", "agentcenter"] })
+      expect(result.default_agent).toBe("sisyphus")
+    })
+
+    test("无 provider 时同样含 platform_agent 与 default_agent", () => {
+      const result = generateModelConfig(createConfig())
+      expect(result.platform_agent).toEqual({ enabled: true, platforms: ["fuyao", "agentcenter"] })
+      expect(result.default_agent).toBe("sisyphus")
+    })
+  })
+
   describe("no providers available", () => {
     test("returns ULTIMATE_FALLBACK for all agents and categories when no providers", () => {
       // #given no providers are available

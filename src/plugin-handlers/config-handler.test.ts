@@ -1,9 +1,13 @@
 import { describe, test, expect, spyOn, beforeEach, afterEach } from "bun:test"
+import { mkdirSync, rmSync } from "fs"
+import { join } from "path"
+import { tmpdir } from "os"
 import { resolveCategoryConfig, createConfigHandler } from "./config-handler"
 import type { CategoryConfig } from "../config/schema"
 import type { OhMyOpenCodeConfig } from "../config"
 
 import * as agents from "../agents"
+import * as platformAgent from "../features/platform-agent"
 import * as sisyphusJunior from "../agents/sisyphus-junior"
 import * as commandLoader from "../features/claude-code-command-loader"
 import * as builtinCommands from "../features/builtin-commands"
@@ -548,5 +552,129 @@ describe("Deadlock prevention - fetchAvailableModels must not receive client", (
     expect(firstCallArgs[0]).toBeUndefined()
 
     fetchSpy.mockRestore?.()
+  })
+})
+
+describe("Design doc 6.1 F3 / 6.5 I2 / 6.6 E1 - platform_agent config", () => {
+  test("F3: 用户配置 agents 中手写 platform:name 覆盖平台为底、用户覆盖", async () => {
+    const testDir = join(tmpdir(), `config-handler-f3-${Date.now()}`)
+    mkdirSync(testDir, { recursive: true })
+    const pluginConfig: OhMyOpenCodeConfig = {
+      platform_agent: { enabled: true, platforms: ["fuyao"] },
+      agents: {
+        "fuyao:CodeHelper": {
+          prompt: "User overridden prompt",
+          skills: ["user-skill"],
+        },
+      },
+    }
+    const config: Record<string, unknown> = {
+      model: "anthropic/claude-opus-4-5",
+      agent: {},
+    }
+    const handler = createConfigHandler({
+      ctx: { directory: testDir },
+      pluginConfig,
+      modelCacheState: {
+        anthropicContext1MEnabled: false,
+        modelContextLimitsCache: new Map(),
+      },
+    })
+    await handler(config)
+    const agentsRecord = config.agent as Record<string, { prompt?: string; skills?: string[] }>
+    expect(agentsRecord["fuyao:CodeHelper"]).toBeDefined()
+    expect(agentsRecord["fuyao:CodeHelper"].prompt).toBe("User overridden prompt")
+    expect(agentsRecord["fuyao:CodeHelper"].skills).toEqual(["user-skill"])
+    try {
+      rmSync(testDir, { recursive: true })
+    } catch {
+      // ignore
+    }
+  })
+
+  test("I2: 关闭 platform_agent 时 config.agent 不包含平台 key", async () => {
+    const testDir = join(tmpdir(), `config-handler-i2-${Date.now()}`)
+    mkdirSync(testDir, { recursive: true })
+    const pluginConfig: OhMyOpenCodeConfig = {
+      platform_agent: { enabled: false, platforms: ["fuyao"] },
+    }
+    const config: Record<string, unknown> = {
+      model: "anthropic/claude-opus-4-5",
+      agent: {},
+    }
+    const handler = createConfigHandler({
+      ctx: { directory: testDir },
+      pluginConfig,
+      modelCacheState: {
+        anthropicContext1MEnabled: false,
+        modelContextLimitsCache: new Map(),
+      },
+    })
+    await handler(config)
+    const keys = Object.keys(config.agent as Record<string, unknown>)
+    expect(keys.some((k) => k.startsWith("fuyao:"))).toBe(false)
+    try {
+      rmSync(testDir, { recursive: true })
+    } catch {
+      // ignore
+    }
+  })
+
+  test("I2: platforms 为空时 config.agent 不包含平台 key", async () => {
+    const testDir = join(tmpdir(), `config-handler-i2-empty-${Date.now()}`)
+    mkdirSync(testDir, { recursive: true })
+    const pluginConfig: OhMyOpenCodeConfig = {
+      platform_agent: { enabled: true, platforms: [] },
+    }
+    const config: Record<string, unknown> = {
+      model: "anthropic/claude-opus-4-5",
+      agent: {},
+    }
+    const handler = createConfigHandler({
+      ctx: { directory: testDir },
+      pluginConfig,
+      modelCacheState: {
+        anthropicContext1MEnabled: false,
+        modelContextLimitsCache: new Map(),
+      },
+    })
+    await handler(config)
+    const keys = Object.keys(config.agent as Record<string, unknown>)
+    expect(keys.some((k) => k.startsWith("fuyao:"))).toBe(false)
+    try {
+      rmSync(testDir, { recursive: true })
+    } catch {
+      // ignore
+    }
+  })
+
+  test("E1: getPlatformAgentList 失败时 config-handler 不崩溃、该平台不合并", async () => {
+    const testDir = join(tmpdir(), `config-handler-e1-${Date.now()}`)
+    mkdirSync(testDir, { recursive: true })
+    const spy = spyOn(platformAgent, "getPlatformAgentList").mockRejectedValueOnce(new Error("network error"))
+    const pluginConfig: OhMyOpenCodeConfig = {
+      platform_agent: { enabled: true, platforms: ["fuyao"] },
+    }
+    const config: Record<string, unknown> = {
+      model: "anthropic/claude-opus-4-5",
+      agent: {},
+    }
+    const handler = createConfigHandler({
+      ctx: { directory: testDir },
+      pluginConfig,
+      modelCacheState: {
+        anthropicContext1MEnabled: false,
+        modelContextLimitsCache: new Map(),
+      },
+    })
+    await expect(handler(config)).resolves.toBeUndefined()
+    const keys = Object.keys(config.agent as Record<string, unknown>)
+    expect(keys.some((k) => k.startsWith("fuyao:"))).toBe(false)
+    spy.mockRestore?.()
+    try {
+      rmSync(testDir, { recursive: true })
+    } catch {
+      // ignore
+    }
   })
 })

@@ -387,4 +387,34 @@ Skill body.
       }
     })
   })
+
+  describe("Design doc 6.3 S4 - discoverOpencodeGlobalSkills 含 market 目录", () => {
+    it("getMarketSkillsDir() 下子目录被扫描，市场 skill 进入结果", async () => {
+      const marketTestDir = join(tmpdir(), "skill-loader-market-" + Date.now())
+      const marketDir = join(marketTestDir, "skills", "market")
+      const skillDir = join(marketDir, "market-test-skill")
+      mkdirSync(skillDir, { recursive: true })
+      writeFileSync(
+        join(skillDir, "SKILL.md"),
+        `---
+name: market-test-skill
+description: Skill from market dir
+---
+# market-test-skill
+`
+      )
+      const originalEnv = process.env.OPENCODE_CONFIG_DIR
+      process.env.OPENCODE_CONFIG_DIR = marketTestDir
+      try {
+        const { discoverOpencodeGlobalSkills } = await import("./loader")
+        const skills = await discoverOpencodeGlobalSkills()
+        const found = skills.find((s) => s.name === "market-test-skill")
+        expect(found).toBeDefined()
+        expect(found!.name).toBe("market-test-skill")
+      } finally {
+        process.env.OPENCODE_CONFIG_DIR = originalEnv
+        rmSync(marketTestDir, { recursive: true, force: true })
+      }
+    })
+  })
 })

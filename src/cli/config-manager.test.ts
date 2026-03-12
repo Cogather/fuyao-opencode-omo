@@ -1,6 +1,17 @@
 import { describe, expect, test, mock, beforeEach, afterEach } from "bun:test"
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "fs"
+import { join } from "path"
+import { tmpdir } from "os"
 
-import { ANTIGRAVITY_PROVIDER_CONFIG, getPluginNameWithVersion, fetchNpmDistTags, generateOmoConfig } from "./config-manager"
+import {
+  ANTIGRAVITY_PROVIDER_CONFIG,
+  getPluginNameWithVersion,
+  fetchNpmDistTags,
+  generateOmoConfig,
+  writeOmoConfig,
+  initConfigContext,
+  resetConfigContext,
+} from "./config-manager"
 import type { InstallConfig } from "./types"
 
 describe("getPluginNameWithVersion", () => {
@@ -407,5 +418,54 @@ describe("generateOmoConfig - model fallback system", () => {
 
     // #then explore should use haiku (isMax20 doesn't affect explore anymore)
     expect((result.agents as Record<string, { model: string }>).explore.model).toBe("anthropic/claude-haiku-4-5")
+  })
+})
+
+describe("Design doc 6.4 C3 - writeOmoConfig 增量合并", () => {
+  let testDir: string
+  let originalEnv: string | undefined
+
+  beforeEach(() => {
+    testDir = join(tmpdir(), `write-omo-config-c3-${Date.now()}`)
+    mkdirSync(testDir, { recursive: true })
+    originalEnv = process.env.OPENCODE_CONFIG_DIR
+    process.env.OPENCODE_CONFIG_DIR = testDir
+    resetConfigContext()
+    initConfigContext("opencode", null)
+  })
+
+  afterEach(() => {
+    process.env.OPENCODE_CONFIG_DIR = originalEnv
+    resetConfigContext()
+    try {
+      rmSync(testDir, { recursive: true })
+    } catch {
+      // ignore
+    }
+  })
+
+  test("目标文件已存在时 deepMerge(newConfig, existing)，existing 覆盖 newConfig 同 key", () => {
+    const omoPath = join(testDir, "fuyao-opencode.json")
+    const existing = {
+      default_agent: "fuyao:CodeHelper",
+      platform_agent: { enabled: true, platforms: ["fuyao"] },
+    }
+    writeFileSync(omoPath, JSON.stringify(existing, null, 2) + "\n")
+    const installConfig: InstallConfig = {
+      hasClaude: true,
+      isMax20: false,
+      hasOpenAI: false,
+      hasGemini: false,
+      hasCopilot: false,
+      hasOpencodeZen: false,
+      hasZaiCodingPlan: false,
+      hasKimiForCoding: false,
+    }
+    const result = writeOmoConfig(installConfig)
+    expect(result.success).toBe(true)
+    const content = readFileSync(omoPath, "utf-8")
+    const merged = JSON.parse(content)
+    expect(merged.default_agent).toBe("fuyao:CodeHelper")
+    expect(merged.platform_agent).toEqual({ enabled: true, platforms: ["fuyao"] })
   })
 })

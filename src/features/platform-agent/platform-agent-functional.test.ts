@@ -27,6 +27,7 @@ import { createPlatformAgentPublishTool } from "../../tools/platform-agent-publi
 import { getAgentToolRestrictions } from "../../shared/agent-tool-restrictions"
 import { getSubagentsFromEntry } from "../../tools/delegate-task/executor"
 import { getCacheFilePath, readVersionCache } from "./version-cache"
+import * as platformAgentApi from "./api"
 
 beforeEach(() => {
   spyOn(agents, "createBuiltinAgents" as any).mockResolvedValue({
@@ -359,6 +360,87 @@ describe("Design doc 6.6 边界 E6 - platform_agent_publish agent_name 非 platf
     )
     expect(result).toContain("Error")
     expect(result).toMatch(/fuyao:Name|agentcenter:Name/)
+    try {
+      rmSync(testDir, { recursive: true })
+    } catch {
+      // ignore
+    }
+  })
+})
+
+describe("Design doc 6.6 E1 - platform_agent_sync 网络失败返回错误文案", () => {
+  test("getPlatformAgentList reject 时返回 Sync failed: ...", async () => {
+    const testDir = join(tmpdir(), `platform-sync-e1-${Date.now()}`)
+    mkdirSync(testDir, { recursive: true })
+    const spy = spyOn(platformAgentApi, "getPlatformAgentList").mockRejectedValueOnce(new Error("network error"))
+    const syncTool = createPlatformAgentSyncTool({
+      directory: testDir,
+      pluginConfig: { platform_agent: { enabled: true, platforms: ["fuyao"] } },
+    })
+    const result = await syncTool.execute!(
+      { platform_type: "fuyao", force_refresh: false },
+      {} as any
+    )
+    expect(result).toMatch(/^Sync failed:/)
+    spy.mockRestore?.()
+    try {
+      rmSync(testDir, { recursive: true })
+    } catch {
+      // ignore
+    }
+  })
+})
+
+describe("Design doc 6.6 E2/E3 - 鉴权失败或平台畸形数据", () => {
+  test("E2: getPlatformAgentList 抛错时 sync 返回明确错误不写脏缓存", async () => {
+    const testDir = join(tmpdir(), `platform-sync-e2-${Date.now()}`)
+    mkdirSync(testDir, { recursive: true })
+    const spy = spyOn(platformAgentApi, "getPlatformAgentList").mockRejectedValueOnce(new Error("401 Unauthorized"))
+    const syncTool = createPlatformAgentSyncTool({
+      directory: testDir,
+      pluginConfig: { platform_agent: { enabled: true, platforms: ["fuyao"] } },
+    })
+    const result = await syncTool.execute!(
+      { platform_type: "fuyao", force_refresh: false },
+      {} as any
+    )
+    expect(result).toMatch(/Sync failed:.*401/)
+    const cached = readVersionCache("fuyao", testDir)
+    expect(Object.keys(cached).length).toBe(0)
+    spy.mockRestore?.()
+    try {
+      rmSync(testDir, { recursive: true })
+    } catch {
+      // ignore
+    }
+  })
+
+  test("E3: 平台返回非预期结构时 config 合并不中断", async () => {
+    const testDir = join(tmpdir(), `config-handler-e3-${Date.now()}`)
+    mkdirSync(testDir, { recursive: true })
+    const spy = spyOn(platformAgentApi, "getPlatformAgentList").mockResolvedValueOnce([
+      { id: "x", name: "CodeHelper", prompt: "p", version: "1.0.0" },
+      { id: "y", name: undefined as any, prompt: "q" },
+    ])
+    const pluginConfig: OhMyOpenCodeConfig = {
+      platform_agent: { enabled: true, platforms: ["fuyao"] },
+    }
+    const config: Record<string, unknown> = {
+      model: "anthropic/claude-opus-4-5",
+      agent: {},
+    }
+    const handler = createConfigHandler({
+      ctx: { directory: testDir },
+      pluginConfig,
+      modelCacheState: {
+        anthropicContext1MEnabled: false,
+        modelContextLimitsCache: new Map(),
+      },
+    })
+    await expect(handler(config)).resolves.toBeUndefined()
+    const agentsRecord = config.agent as Record<string, unknown>
+    expect(agentsRecord["fuyao:CodeHelper"]).toBeDefined()
+    spy.mockRestore?.()
     try {
       rmSync(testDir, { recursive: true })
     } catch {
