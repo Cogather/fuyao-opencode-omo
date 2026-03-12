@@ -695,6 +695,12 @@ cd <你的路径>/fuyao-opencode-omo
 bun run build
 ```
 
+或一键构建并查看集成说明（含配置目录与后续命令）：
+
+```bash
+bun run integrate
+```
+
 产物在 `dist/`。插件的 `package.json` 中入口为 `main: "dist/index.js"`，OpenCode 加载插件时只会执行该文件，因此从源码集成时必须先执行本步，否则插件无法加载或会运行旧代码。
 
 **打包时若只有 npm/npx（没有 Bun）**：当前构建脚本依赖 Bun（`bun run build`）。若本机只有 npm/npx，可：① `npm install -g bun` 后用 `bun run build` 构建。
@@ -725,8 +731,9 @@ bun run build
 
 每次在代码仓拉取或修改 fuyao-opencode 后，需要做两处更新，否则 OpenCode 可能仍加载旧版本：
 
-1. **在 fuyao-opencode-omo 仓库目录**：执行 `bun run build`，重新生成 `dist/`。
-2. **在 OpenCode 配置目录**：执行 `bun install`（使用 npm 则为 `npm install`）。配置目录的 `package.json` 里已经是 `"fuyao-opencode": "file:..."`，**不需要再写一次 file: 或重新 add**；在配置目录执行一次 `bun install` 会重新解析依赖并从该路径拉取最新内容。。
+1. **在 fuyao-opencode-omo 仓库目录**：执行 `bun run build`（或 `bun run integrate` 构建并打印集成说明）。
+2. **在 OpenCode 配置目录**：执行 `bun install`（使用 npm 则为 `npm install`）。配置目录的 `package.json` 里已经是 `"fuyao-opencode": "file:..."`，**不需要再写一次 file: 或重新 add**；在配置目录执行一次 `bun install` 会重新解析依赖并从该路径拉取最新内容。
+3. 若在配置目录执行 `bun install` 时报 **EBUSY**，请先**关闭 OpenCode** 再重试。
 
 然后再启动或重启 OpenCode 即可生效。
 
@@ -799,7 +806,7 @@ OpenCode 合并多级配置（全局、项目、本地 plugin 目录等）时，
 
 | 步骤     | 说明 |
 |----------|------|
-| 构建     | 在 `fuyao-opencode-omo` 下执行 `bun run build`。 |
+| 构建     | 在 `fuyao-opencode-omo` 下执行 `bun run build`；或执行 `bun run integrate` 构建并打印集成后续命令。 |
 | 配置目录 | Windows: `%USERPROFILE%\.config\opencode` 或 `%APPDATA%\opencode`；macOS/Linux: `~/.config/opencode`。**bun add 与 plugin 必须在此目录**，在项目目录操作不会生效。 |
 | 安装插件 | 在**上述配置目录**执行 `bun add "file:..."` 或 `npm install fuyao-opencode` 等。**install 非必须**，可选执行 `bun node_modules/fuyao-opencode/dist/cli/index.js install` 自动写入 plugin 与 fuyao-opencode.json。 |
 | 声明插件 | 在配置目录的 `opencode.jsonc` 或 `opencode.json` 中设置 `"plugin": ["fuyao-opencode"]`；不跑 install 时需手动加。 |
