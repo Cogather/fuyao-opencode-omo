@@ -32,9 +32,20 @@ export interface PublishResult {
   version: string
 }
 
-/** Adapter per platform: list + optional publish. Connection/auth inside impl. */
+/** Options for getAgentDetail: by id or by name+version. */
+export interface GetAgentDetailOptions {
+  /** Lookup by app id (platform-specific). */
+  id?: string
+  /** Lookup by name (and optional version). */
+  name?: string
+  version?: string
+}
+
+/** Adapter per platform: list + optional detail + optional publish. Connection/auth inside impl. */
 export interface IPlatformAdapter {
   getAgentList(options?: GetAgentListOptions): Promise<PlatformAgentApp[]>
+  /** Optional: get single app by id or name+version. When absent, api layer may fallback to list. */
+  getAgentDetail?(options: GetAgentDetailOptions): Promise<PlatformAgentApp | null>
   /** Optional: publish/update app on platform. When absent, api layer mocks success. */
   publishAgent?(app: PlatformAgentApp): Promise<PublishResult>
 }

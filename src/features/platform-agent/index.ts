@@ -1,5 +1,5 @@
 export type { PlatformType, PlatformAgentApp, IPlatformAdapter, GetAgentListOptions } from "./types"
-export { getPlatformAgentList, publishPlatformAgent } from "./api"
+export { getPlatformAgentList, getPlatformAgentDetail, publishPlatformAgent } from "./api"
 export {
   platformAppToOpenCodeAgent,
   platformAppsToAgentRecord,

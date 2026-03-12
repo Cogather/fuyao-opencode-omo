@@ -1,6 +1,6 @@
 # 基于 OMO 的 Agent 平台对接插件 · 设计文档
 
-**文档与实现一致性**：本文档同时描述**设计目标**与**当前实现**。阶段一至阶段四（列表拉取、合并、mock、version-cache、发布/同步 tool 与 command、版本校验 Toast、openCodeAgentToPlatformApp/publishPlatformAgent 及适配器 publishAgent mock）**已完成**。待实现见 **第 11 节**：平台真实 API（getAgentDetail/发布 HTTP）、可选 constants/platforms 独立 types、Skill 市场（3.10）。已实现与未实现清单见 **第 11 节「设计文档与代码一致性检查」**，实现阶段划分见 **3.7**。**对原 OMO 的修改**：逐文件说明见 **3.2.0**，**配置项新增与默认值**见 **3.2.0.1**，**Prompt 相关修改**见 **3.2.0.2**。
+**文档与实现一致性**：本文档同时描述**设计目标**与**当前实现**。设计范围内能力**已全部实现**（含 getAgentDetail、platforms/types、Skill 市场列表/下载/注入、skill_inject_to_agent tool、persistAgentSkill）。其中**部分能力当前为 Mock**，需在对接真实后端时替换，详见 **第 11.5 节「Mock 能力与后期改造要点」**。已实现与 Mock 清单见 **第 11 节**；实现阶段划分见 **3.7**。**对原 OMO 的修改**：逐文件说明见 **3.2.0**，**配置项新增与默认值**见 **3.2.0.1**，**Prompt 相关修改**见 **3.2.0.2**。
 
 ---
 
@@ -54,7 +54,7 @@
   - **配置层**：schema 中增加 `platform_agent`（enabled、platforms 数组：拉取类别）；连接与鉴权对用户黑盒，由实现或环境提供。✓ 已实现
   - **插件逻辑层**：config-handler 在合并 config 时拉取平台列表并合并、写 version-cache；index 注册 platform_agent_publish/platform_agent_sync、platform-publish/platform-sync command；message.updated 做版本校验与 Toast。✓ 已实现
   - **平台抽象层**：统一入口 `getPlatformAgentList` / `publishPlatformAgent`，按 platformType 调用 fuyao 或 agentcenter 的实现。✓ 已实现（publish 当前为 mock）
-  - **平台实现层**：`platforms/fuyao.ts`、`platforms/agentcenter.ts` 实现 getAgentList（mock）、publishAgent（mock）；真实 HTTP API 与 getAgentDetail 待实现。
+  - **平台实现层**：`platforms/fuyao.ts`、`platforms/agentcenter.ts` 实现 getAgentList、getAgentDetail、publishAgent（**当前均为 Mock**）；对接真实 HTTP 时替换为真实请求，见 11.5。
 - **数据流**：平台列表 → version-cache（按平台）+ config.agent；用户发布 → publishPlatformAgent → 更新 version-cache；版本校验 → 读缓存 + 拉列表比对 → Toast 或 sync 返回文案。✓ 已实现（发布/同步为 mock 或真实由适配器决定）
 
 ---
@@ -416,6 +416,8 @@ src/
 | 2 | 对接真实 Skill 市场列表/详情/下载 API；实现 downloadSkillToMarket，并实现「注入到 agent」的配置写回。 |
 | 3 | 可选：version 缓存与更新提示；tool/command 暴露与 UI 集成。 |
 
+**实现状态**：3.10 已实现（features/skill-market、getMarketSkillsDir、opencode-skill-loader 扫描 market、persistAgentSkill、skill_inject_to_agent tool）；列表与下载当前为 **Mock**，见 **11.5**。
+
 ---
 
 ## 4. UML 4+1 视图
@@ -428,7 +430,7 @@ src/
 ### 4.2 开发视图
 
 - **目录结构**：见 3.3；OMO 原有 plugin-handlers、config、features、tools、shared 等在现有基础上做点状修改。
-- **接口边界**：platform-agent 对外暴露 getPlatformAgentList、publishPlatformAgent、readVersionCache、writeVersionCache、platformAppToOpenCodeAgent、openCodeAgentToPlatformApp；各 platform 实现 getAgentList、getAgentDetail、publishAgent。
+- **接口边界**：platform-agent 对外暴露 getPlatformAgentList、**getPlatformAgentDetail**、publishPlatformAgent、readVersionCache、writeVersionCache、platformAppToOpenCodeAgent、openCodeAgentToPlatformApp；各 platform 实现 getAgentList、getAgentDetail、publishAgent（当前均为 Mock，见 11.5）。
 
 ### 4.3 进程视图
 
@@ -683,7 +685,7 @@ OpenCode 合并多级配置（全局、项目、本地 plugin 目录等）时，
 | plugin 手写？ | install 会自动写入 `plugin` 与可选配置；不跑 install 时需在配置目录手动加 `"fuyao-opencode"`。 |
 | 只有 npm/npx | 用户：`npm install fuyao-opencode`（或从 GitHub 安装），可选 `npx fuyao-opencode install`。开发者构建：可先 `npm install -g bun` 再 `bun run build`，或使用 GitHub 安装不本地构建。 |
 
-按上述步骤即可在「npm 安装的 OpenCode」中集成并日常使用 fuyao-opencode；对外分发时可选 npm 或仅 GitHub。插件**阶段一～四能力**（列表拉取、合并、version-cache、发布/同步 tool 与 command、版本校验 Toast）已实现；待实现项（真实 API、Skill 市场等）见**第 11 节**。
+按上述步骤即可在「npm 安装的 OpenCode」中集成并日常使用 fuyao-opencode；对外分发时可选 npm 或仅 GitHub。插件**设计范围内能力已全部实现**（含平台列表/详情/发布、version-cache、发布/同步、版本校验 Toast、Skill 市场列表/下载/注入）；**当前为 Mock 的能力**及后期替换要点见**第 11.5 节**。
 
 ---
 
@@ -706,6 +708,7 @@ OpenCode 合并多级配置（全局、项目、本地 plugin 目录等）时，
 | 2025-03 | **对原 OMO 的修改说明**：新增 **3.2.0 对原 OMO 的修改说明（逐文件）**，集中列出 config-handler、schema、index、delegate-task/executor、model-fallback、config-manager、persist-default-agent 等修改/新增内容及实现状态，便于合入上游与冲突排查。 |
 | 2025-03 | **配置项与 Prompt 修改**：新增 **3.2.0.1 配置项新增与默认值**（platform_agent、default_agent、skill_availability、subagent_availability、agents 动态 key、AgentOverrideConfigSchema 扩展及 install 默认值）；新增 **3.2.0.2 Prompt 相关修改**（平台 mock 系统提示词、config-bridge prompt 映射、与 OMO prompt 逻辑的关系）。 |
 | 2025-03 | **实施完成（阶段二～四）**：实现 version-cache（constants、version-cache.ts）、config-handler 合并后写 version-cache；openCodeAgentToPlatformApp、publishPlatformAgent 及适配器 publishAgent（mock）；platform_agent_publish、platform_agent_sync 两 tool 及 platform-publish、platform-sync command；message.updated 平台版本校验与 showToast（防抖）。设计文档第 11 节与 3.1/3.2/3.3 已更新为「已完成」；11.3 仅保留 getAgentDetail、真实 API、Skill 市场等待实现项。 |
+| 2025-03 | **剩余能力补齐与 Mock 标注**：实现 getAgentDetail（接口 + api + fuyao/agentcenter 适配器 mock）；新增 platforms/types.ts（re-export）；Skill 市场注入：persistAgentSkill（shared）、skill_inject_to_agent tool，并确认 skill-market 列表/下载与 opencode-skill-loader 扫描 market 已存在。设计文档更新为「设计范围内能力已全部实现」；新增 **11.5 Mock 能力与后期改造要点**，明确列出需替换为真实 API 的 5 项（平台列表/详情/发布、Skill 市场列表/下载）及对应文件与改造要点。 |
 
 ---
 
@@ -728,7 +731,7 @@ OpenCode 合并多级配置（全局、项目、本地 plugin 目录等）时，
 | **platform_agent 配置** | `src/config/schema.ts` | `PlatformAgentConfigSchema`：`enabled`、`platforms: ["fuyao","agentcenter"]`。 |
 | **install 默认写入 platform_agent** | `src/cli/model-fallback.ts` | `platform_agent: { enabled: true, platforms: ["fuyao", "agentcenter"] }`。 |
 | **config-handler 拉取、合并与写 version-cache** | `src/plugin-handlers/config-handler.ts` | `loadPlatformAgents(pluginConfig, ctx.directory)` 遍历 platforms、拉取并合并，每平台合并后 `writeVersionCache(platform, versionMap, directory)`。 |
-| **platform-agent 模块** | `src/features/platform-agent/` | types、api（getPlatformAgentList、publishPlatformAgent）、config-bridge（platformAppToOpenCodeAgent、platformAppsToAgentRecord、openCodeAgentToPlatformApp）、version-cache（read/write/getCacheFilePath）、constants、platforms（getAgentList + publishAgent mock）、index。 |
+| **platform-agent 模块** | `src/features/platform-agent/` | types、api（getPlatformAgentList、**getPlatformAgentDetail**、publishPlatformAgent）、config-bridge、version-cache、constants、platforms（getAgentList、**getAgentDetail**、publishAgent；当前均为 **Mock**）、**platforms/types.ts**（re-export）、index。 |
 | **version-cache** | `src/features/platform-agent/version-cache.ts` | getCacheFilePath、readVersionCache、writeVersionCache；按平台分文件，目录为 ctx.directory。 |
 | **constants** | `src/features/platform-agent/constants.ts` | PLATFORM_AGENT_CACHE_PREFIX。 |
 | **platform_agent_publish / platform_agent_sync tool** | `src/tools/platform-agent-publish/`、`src/tools/platform-agent-sync/` | createPlatformAgentPublishTool、createPlatformAgentSyncTool；index 注册为 platform_agent_publish、platform_agent_sync。 |
@@ -740,20 +743,36 @@ OpenCode 合并多级配置（全局、项目、本地 plugin 目录等）时，
 | **平台 agent 的 tool 限制** | `src/shared/agent-tool-restrictions.ts` | 未在表内的 agent 返回 `{}`，平台 agent 等价于默认允许。 |
 | **default_agent 与持久化** | schema、config-handler、persist-default-agent、index 的 message.updated | 与 3.9.4 一致。 |
 | **assets schema** | `assets/fuyao-opencode.schema.json` | 存在。 |
+| **getPlatformAgentDetail** | `src/features/platform-agent/api.ts`、adapters | 接口 getAgentDetail(options)；api 层有则调适配器，否则从 list 查找；fuyao/agentcenter 适配器已实现（**Mock**：从 mock 列表按 id 或 name+version 查找）。 |
+| **platforms/types.ts** | `src/features/platform-agent/platforms/types.ts` | 已新增，re-export 上级 types。 |
+| **Skill 市场（3.10）** | `src/features/skill-market/`、opencode-skill-loader、shared | types（SkillMarketItem）、api（getSkillMarketList、getSkillMarketListAll、downloadSkillToMarket、isSkillDownloaded）；mock-data；opencode-skill-loader 已扫描 getMarketSkillsDir()；**persistAgentSkill**（shared）写回 agents[agentKey].skills；**skill_inject_to_agent** tool（下载可选 + 注入并写配置）。列表与下载当前为 **Mock**，见 11.5。 |
 
-### 11.3 未实现或待增强
+### 11.3 待增强（仅替换 Mock）
 
-| 项目 | 设计文档描述 | 当前代码情况 |
-|------|--------------|--------------|
-| **平台适配器 getAgentDetail** | 附录 7：按 id 或 name+version 获取单个应用详情。 | **未实现**：适配器仅实现 getAgentList、publishAgent（mock）；getAgentDetail 未在接口与实现中出现。 |
-| **平台真实 HTTP API** | 列表/详情/发布对接扶摇、AgentCenter 真实接口。 | **当前为 mock**：getAgentList、publishAgent 返回 mock 数据或 mock 成功；替换为真实 HTTP 后需保证响应结构与 PlatformAgentApp 一致。 |
-| **platforms/types.ts** | 3.3 中 platforms 下独立 types。 | **可选**：类型统一在 `features/platform-agent/types.ts`，无独立 platforms/types.ts。 |
-| **Skill 市场对接** | 3.10：拉取 skill 列表、下载到约定目录、注入到 agent。 | **未实现**：设计已给出，代码未实现。 |
+| 项目 | 说明 |
+|------|------|
+| **平台真实 HTTP API** | 在 `platforms/fuyao.ts`、`platforms/agentcenter.ts` 中将 getAgentList、getAgentDetail、publishAgent 由 mock 改为真实 HTTP 调用；鉴权与 baseUrl 在适配器内解析，不暴露给配置。 |
+
+其余设计项均已实现；**Mock 清单与改造要点**见 **11.5**。
 
 ### 11.4 小结与建议
 
-- **阶段一～四（列表拉取、合并、mock、version-cache、发布/同步 tool 与 command、版本校验 Toast、openCodeAgentToPlatformApp / publishPlatformAgent、适配器 publishAgent mock）**：已实现且与设计一致；目录以「实际在 `src/features/platform-agent/`」为准（见 3.3）；tools 为 `src/tools/platform-agent-publish`、`platform-agent-sync`。
-- **待实现/增强**：平台真实 HTTP API（列表/详情/发布）、适配器 getAgentDetail（可选）、Skill 市场（3.10）；platforms 下独立 types 为可选。
+- **设计范围内能力已全部实现**：平台列表/详情/合并、version-cache、发布/同步 tool 与 command、版本校验 Toast、getAgentDetail、platforms/types、Skill 市场（列表/下载/注入、skill_inject_to_agent、persistAgentSkill、loader 扫描 market 目录）。
+- **后期重点**：将 11.5 中列出的 **Mock 能力** 替换为真实 API（平台 Agent 列表/详情/发布、Skill 市场列表/下载）。
 
-**快速对照**：文档开头已对「设计 vs 当前实现」做简要说明；详细清单以本节 11.2（已实现）、11.3（未实现或待增强）为准。
+**快速对照**：文档开头已对「设计 vs 当前实现」做简要说明；**Mock 与改造要点**以 **11.5** 为准。
+
+### 11.5 Mock 能力与后期改造要点
+
+以下能力**当前为 Mock 实现**，对接真实后端时需**重点修改**对应文件与接口，保证请求/响应与设计一致（如附录 7、3.10.4）。
+
+| 能力 | 当前实现（Mock） | 后期改造要点 |
+|------|------------------|--------------|
+| **平台 Agent 列表** | `platforms/fuyao.ts`、`platforms/agentcenter.ts` 的 `getAgentList` 返回 `MOCK_FUYAO_AGENTS` / `MOCK_AGENTCENTER_AGENTS`。 | 替换为 GET 平台列表 API；响应映射为 `PlatformAgentApp[]`（id、name、version、prompt、model、skills、mcps、subagents 等）；鉴权在适配器内处理。 |
+| **平台 Agent 详情** | 适配器 `getAgentDetail` 从 mock 列表中按 id 或 name+version 查找返回。 | 替换为 GET 平台详情 API（按 id 或 name+version）；返回单条 `PlatformAgentApp`。 |
+| **平台 Agent 发布** | 适配器 `publishAgent` 直接 resolve `{ version: app.version ?? "1.0.0" }`，无网络请求。 | 替换为 POST/PUT 平台发布 API；body 含 name、prompt、model、skills、mcps、subagents 等；响应解析 version 并写 version-cache。 |
+| **Skill 市场列表** | `features/skill-market/api.ts` 中 `getSkillMarketListFromMock` 返回 `MOCK_SKILL_MARKET_ITEMS`；`getSkillMarketList` 仅用 mock。 | 接入真实 Skill 市场列表/搜索 API；返回 `SkillMarketItem[]`（id、name、version、description、downloadUrl 等）；可保留分页与 query 参数。 |
+| **Skill 市场下载** | `downloadSkillToMarket` 仅在本地创建目录并写入占位 `SKILL.md`，未从 downloadUrl 拉包。 | 使用 `SkillMarketItem.downloadUrl`（或平台包地址）拉取包并解压到 `getMarketSkillsDir()/<skillId>/`；保证目录内含 `SKILL.md` 及 frontmatter name。 |
+
+**说明**：version-cache、config-handler 合并、发布/同步 tool、版本校验 Toast、openCodeAgentToPlatformApp、persistAgentSkill、skill_inject_to_agent、opencode-skill-loader 对 market 目录的扫描等**非 Mock**，无需因对接真实 API 而改动逻辑，仅需保证适配器返回结构与类型一致。
 

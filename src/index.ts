@@ -81,6 +81,7 @@ import {
   createTask,
   createPlatformAgentPublishTool,
   createPlatformAgentSyncTool,
+  createSkillInjectToAgentTool,
 } from "./tools";
 import { BackgroundManager } from "./features/background-agent";
 import { SkillMcpManager } from "./features/skill-mcp-manager";
@@ -476,6 +477,7 @@ const OhMyOpenCodePlugin: Plugin = async (ctx) => {
     directory: ctx.directory,
     pluginConfig,
   });
+  const skillInjectToAgentTool = createSkillInjectToAgentTool();
 
   return {
     tool: {
@@ -484,6 +486,7 @@ const OhMyOpenCodePlugin: Plugin = async (ctx) => {
       call_omo_agent: callOmoAgent,
       platform_agent_publish: platformAgentPublishTool,
       platform_agent_sync: platformAgentSyncTool,
+      skill_inject_to_agent: skillInjectToAgentTool,
       ...(lookAt ? { look_at: lookAt } : {}),
       delegate_task: delegateTask,
       list_available_subagents: listAvailableSubagentsTool,
