@@ -87,6 +87,13 @@ export function mergeConfigs(
       ]),
     ],
     claude_code: deepMerge(base.claude_code, override.claude_code),
+    sisyphus_agent:
+      base.sisyphus_agent || override.sisyphus_agent
+        ? (deepMerge(
+            (base.sisyphus_agent ?? {}) as Record<string, unknown>,
+            (override.sisyphus_agent ?? {}) as Record<string, unknown>
+          ) as OhMyOpenCodeConfig["sisyphus_agent"])
+        : undefined,
   };
 }
 

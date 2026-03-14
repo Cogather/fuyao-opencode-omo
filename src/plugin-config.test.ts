@@ -115,5 +115,25 @@ describe("mergeConfigs", () => {
       expect(result.disabled_hooks).toContain("session-recovery");
       expect(result.disabled_hooks?.length).toBe(3);
     });
+
+    it("should deep merge sisyphus_agent so project can set only replace_plan", () => {
+      const base: OhMyOpenCodeConfig = {
+        sisyphus_agent: {
+          planner_enabled: true,
+          replace_plan: true,
+        },
+      };
+
+      const override: OhMyOpenCodeConfig = {
+        sisyphus_agent: {
+          replace_plan: false,
+        },
+      };
+
+      const result = mergeConfigs(base, override);
+
+      expect(result.sisyphus_agent?.replace_plan).toBe(false);
+      expect(result.sisyphus_agent?.planner_enabled).toBe(true);
+    });
   });
 });

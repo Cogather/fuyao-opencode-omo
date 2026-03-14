@@ -18,7 +18,7 @@ function createConfig(overrides: Partial<InstallConfig> = {}): InstallConfig {
 }
 
 describe("generateModelConfig", () => {
-  describe("Design doc 6.4 C2 - install 默认写入 platform_agent、default_agent", () => {
+  describe("Design doc 6.4 C2 - install 默认写入 platform_agent、default_agent、sisyphus_agent", () => {
     test("返回值含 platform_agent: { enabled: true, platforms: [fuyao, agentcenter] }、default_agent: sisyphus", () => {
       const config = createConfig({ hasClaude: true })
       const result = generateModelConfig(config)
@@ -30,6 +30,13 @@ describe("generateModelConfig", () => {
       const result = generateModelConfig(createConfig())
       expect(result.platform_agent).toEqual({ enabled: true, platforms: ["fuyao", "agentcenter"] })
       expect(result.default_agent).toBe("sisyphus")
+    })
+
+    test("install 默认写入 sisyphus_agent.replace_plan: false 以保留 OpenCode 原生 plan", () => {
+      const withProvider = generateModelConfig(createConfig({ hasClaude: true }))
+      const noProvider = generateModelConfig(createConfig())
+      expect(withProvider.sisyphus_agent).toEqual({ replace_plan: false })
+      expect(noProvider.sisyphus_agent).toEqual({ replace_plan: false })
     })
   })
 
