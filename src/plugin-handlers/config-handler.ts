@@ -448,7 +448,9 @@ export function createConfigHandler(deps: ConfigHandlerDeps) {
       mergedPlatformAndUser[key] = ensureSubagentsInOptions(merged);
     }
 
+    // Preserve OpenCode native agents (build, plan, etc.): merge base first, then overlay plugin agents.
     config.agent = {
+      ...(configAgent ?? {}),
       ...agentConfig,
       ...Object.fromEntries(
         Object.entries(builtinAgents).filter(([k]) => k !== "sisyphus")
@@ -457,7 +459,10 @@ export function createConfigHandler(deps: ConfigHandlerDeps) {
       ...projectAgents,
       ...pluginAgents,
       ...mergedPlatformAndUser,
-      build: { ...migratedBuild, mode: "subagent", hidden: true },
+      // Only override build when we explicitly hide it (OpenCode-Builder flow); else native build stays visible.
+      ...(builderEnabled
+        ? { build: { ...migratedBuild, mode: "subagent", hidden: true } }
+        : {}),
       ...(planDemoteConfig ? { plan: planDemoteConfig } : {}),
     };
     } else {
@@ -482,7 +487,10 @@ export function createConfigHandler(deps: ConfigHandlerDeps) {
       const builtinOverridesFromConfig = Object.fromEntries(
         Object.entries(userAgentOverridesElse).filter(([key]) => key in builtinAgents)
       );
+      // Preserve OpenCode native agents when sisyphus is disabled.
+      const configAgentElse = config.agent as AgentConfig | undefined;
       config.agent = {
+        ...(configAgentElse ?? {}),
         ...builtinAgents,
         ...userAgents,
         ...projectAgents,

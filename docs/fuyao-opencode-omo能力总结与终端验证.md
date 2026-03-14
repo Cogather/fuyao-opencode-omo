@@ -65,31 +65,51 @@
 | **skill_directories 配置** | 可选 `skill_directories: string[]`，额外扫描的 skill 根目录；相对路径相对于当前工作目录解析。 |
 | **writeOmoConfig 增量合并** | 已存在配置文件时，新写入与已有配置 deepMerge，已有项优先，仅补充缺失。 |
 
+### 7. OpenCode 原生 Agent 保留
+
+| 能力 | 说明 |
+|------|------|
+| **合并时保留原生 agents** | 插件合并 config 时以 OpenCode 传入的 `config.agent` 为底，再叠加插件 agents（Sisyphus、平台 Agent 等），因此 **build、plan** 及 OpenCode 自带的其它原生 agent 仍会出现在列表中，不会被整表覆盖。 |
+| **build 的显示** | 仅当配置中开启「默认 Builder」（`sisyphus_agent.default_builder_enabled: true`）时，会用插件提供的 OpenCode-Builder 逻辑并将原生 build 设为隐藏；未开启时原生 build 保持可见。 |
+| **plan 的替换** | 配置项 `sisyphus_agent.replace_plan` 默认为 true 时，plan 会被替换为 Prometheus（以 plan 名义）；设为 false 时保留 OpenCode 原生 plan。 |
+
 ---
 
 ## 二、在 OpenCode 终端/窗口中如何触发并验证
 
 以下均在 **OpenCode 的聊天/终端界面** 中操作；Agent 会通过 **工具调用** 或 **斜杠命令** 执行能力。
 
-### 1. 验证「平台 Agent 出现在列表并可切换」
+### 1. 验证「OpenCode 原生 Agent（build、plan）保留」
+
+安装 OMO 插件后，OpenCode 自带的 **build、plan** 及其它原生 agent 应仍出现在 Agent 列表中，与插件提供的 Sisyphus、平台 Agent 等并存。
+
+- **操作**：
+  1. 确认已按文档完成插件安装（配置目录中 `plugin` 含 `fuyao-opencode`），重启 OpenCode。
+  2. 在 OpenCode 中打开 Agent 选择器（界面上的 Agent 下拉或等价入口）。
+  3. 在列表中查找 **build**、**plan**（或当前 OpenCode 版本提供的同名/同类原生 agent）。
+- **预期**：列表中除插件提供的 Sisyphus、Hephaestus、平台 Agent（如 fuyao:CodeHelper）等外，能看到 **build**、**plan** 等 OpenCode 原生 agent；若 OpenCode 默认提供其它原生 agent，也应一并可见。
+- **可选（保留原生 plan）**：若希望使用 OpenCode 原生 plan 而非 Prometheus 作为 plan，在 OMO 配置（如 fuyao-opencode.json）中设置 `sisyphus_agent.replace_plan: false`，保存后重启 OpenCode，再检查 Agent 列表中的 plan 是否为原生版本。
+- **可选（build 不隐藏）**：若未配置 `sisyphus_agent.default_builder_enabled: true`，原生 build 不会被插件设为隐藏，应始终在列表中可见。
+
+### 2. 验证「平台 Agent 出现在列表并可切换」
 
 - **操作**：在 OpenCode 中打开 Agent 选择器（如 /agents 或界面上的 Agent 下拉）。
 - **预期**：列表中除内置 Agent（Sisyphus、Oracle 等）外，能看到 **fuyao:CodeHelper**、**fuyao:DocAgent**、**agentcenter:Reviewer** 等（名称以 mock 为准）；仅作为子 agent 的应用可能不在主列表，但可通过子 agent 或 @ 使用。
 - **前提**：配置中 `platform_agent.enabled: true` 且 `platforms` 含 `fuyao` 或 `agentcenter`（install 后默认已包含）。
 
-### 2. 验证「使用平台 Agent 对话」
+### 3. 验证「使用平台 Agent 对话」
 
 - **操作**：在 Agent 下拉中选择 **fuyao:CodeHelper**（或任意平台 Agent），在输入框发一条普通消息，例如：「简单介绍一下你自己」。
 - **预期**：该 Agent 按 mock 系统提示词回复；行为与内置 Agent 一致。
 - **顺带验证**：主会话下首次用该 Agent 发消息后，`default_agent` 会被写回配置（下次启动会默认选中该 Agent，若需验证可重启 OpenCode 或查看配置文件）。
 
-### 2.1 验证「平台下发的 skill/MCP 定义合并进 config」
+### 3.1 验证「平台下发的 skill/MCP 定义合并进 config」
 
 - **说明**：平台应用可携带 `skill_definitions`、`mcp_definitions`；拉取时插件会将其合并进 OpenCode 的 `config.command`、`config.mcp`，无需本地已有同名 skill/MCP 即可被该 agent 使用。
 - **操作**：启用平台 Agent（`platform_agent.enabled: true`、`platforms: ["fuyao"]`）并打开会话后，可在调试或单元测试中确认：config-handler 执行后，`config.command` 包含平台下发的 skill 定义（如 mock 中的 `platform-code-review`、`platform-doc-skill`），`config.mcp` 包含平台下发的 MCP 配置（如 mock 中的 `platform-helper-mcp`）。
 - **终端/对话验证**：选择 **fuyao:CodeHelper** 后，询问「我可以用哪些 skill？」并让 Agent 调用 `list_available_skills`；列表中应包含平台下发的 skill（如 `platform-code-review`），说明已合并进 config 并被发现。
 
-### 3. 验证「平台同步」/platform-sync
+### 4. 验证「平台同步」/platform-sync
 
 - **操作**：在输入框输入斜杠命令：
   ```text
@@ -102,7 +122,7 @@
 - **预期**：Agent 会调用 `platform_agent_sync` tool；返回「当前与平台一致」或「以下 Agent 有更新：…」或「已刷新到平台最新，共 N 个应用。」（当前为 Mock，具体文案以实现为准）。
 - **说明**：若未配置该 platform，会返回「Platform "xxx" is not in configured platforms」。
 
-### 4. 验证「平台发布」/platform-publish
+### 5. 验证「平台发布」/platform-publish
 
 - **操作**：先切换到平台 Agent（如 **fuyao:CodeHelper**），再输入：
   ```text
@@ -113,7 +133,7 @@
 - **错误验证**：若传入非 platform:name（如 `sisyphus`），应返回要求使用 `fuyao:Name` 或 `agentcenter:Name` 的 Error 文案。
 - **managers 校验**：若该应用配置了 **managers**（管理员名单），须在配置中设置 `platform_agent.publish_identity` 为当前用户身份（如 `alice@example.com`），且该身份在 managers 名单内才能发布；未配置 publish_identity 或身份不在名单内会返回明确错误（可本地修改，但不能发布）。
 
-### 5. 验证「子 Agent 与 delegate_task」
+### 6. 验证「子 Agent 与 delegate_task」
 
 - **操作**：选中一个配置了 subagents 的平台 Agent（或内置如 Sisyphus），在对话中询问：
   ```text
@@ -123,7 +143,7 @@
 - **操作**：再让当前 Agent 通过 delegate_task 调用某一子 agent 执行小任务（如「让 oracle 简单分析一下当前项目类型」）。
 - **预期**：仅当被调 agent 在当前 agent 的 subagents 白名单内时，调用会成功；否则应被约束。
 
-### 6. 验证「Skill 与 list_available_skills」
+### 7. 验证「Skill 与 list_available_skills」
 
 - **操作**：任意 Agent 对话中输入：
   ```text
@@ -131,7 +151,7 @@
   ```
 - **预期**：Agent 调用 `list_available_skills`，返回当前 agent 可用 skill 列表（受 skill_availability 与 agent.skills 配置影响）。
 
-### 7. 验证「Skill 注入到 Agent」skill_inject_to_agent
+### 8. 验证「Skill 注入到 Agent」skill_inject_to_agent
 
 - **操作**：在对话中让 Agent 使用 `skill_inject_to_agent` tool，例如：
   ```text
@@ -140,7 +160,7 @@
 - **预期**：Agent 调用 tool；成功后返回「Injected skill "xxx" into agent "fuyao:CodeHelper"...」；配置文件中该 agent 的 `skills` 应包含对应 skill name。
 - **说明**：当前市场为 Mock，id 以 mock-data 为准（如 market-code-review、market-doc-helper、market-test-gen）。
 
-### 8. 验证「内置命令」init-deep / refactor / ralph-loop
+### 9. 验证「内置命令」init-deep / refactor / ralph-loop
 
 - **操作**：在输入框输入：
   ```text
@@ -156,7 +176,7 @@
   ```
 - **预期**：对应命令模板被加载，Agent 按模板中的步骤与工具（LSP、AST-grep、delegate 等）执行；/cancel-ralph 可终止 ralph-loop。
 
-### 9. 验证「默认 Agent 持久化」
+### 10. 验证「默认 Agent 持久化」
 
 - **操作**：在主会话将 Agent 切换为 **fuyao:CodeHelper**，发送任意一条用户消息（如「hi」）。
 - **预期**：发送后，配置文件中 `default_agent` 被写为 `fuyao:CodeHelper`（可打开 fuyao-opencode 配置文件查看）。下次启动 OpenCode 时，默认选中的应为该 Agent。
@@ -166,7 +186,7 @@
 - **操作**：使用平台 Agent（如 fuyao:CodeHelper）在主会话发消息；若后端/缓存判断该 Agent 有版本更新（当前 Mock 可人为改缓存或适配器返回版本来模拟）。
 - **预期**：可能收到 Toast「Agent 有更新…可执行 /platform-sync」；同一 session+agent 防抖只提示一次。
 
-### 11. 验证「平台独有工具」platform_list_tools / platform_invoke_tool
+### 12. 验证「平台独有工具」platform_list_tools / platform_invoke_tool
 
 - **操作**：选择平台 Agent（如 **fuyao:CodeHelper**），在对话中让 Agent 先列出该 agent 可用的平台工具，再执行其中一个，例如：
   ```text
@@ -185,6 +205,7 @@
 
 | 验证项 | 建议配置 / 前置 |
 |--------|------------------|
+| 原生 build/plan 保留 | 安装插件并重启 OpenCode 后，在 Agent 下拉中直接查看是否仍有 build、plan；可选 `sisyphus_agent.replace_plan: false` 保留原生 plan |
 | 平台 Agent 列表可见 | `platform_agent: { enabled: true, platforms: ["fuyao"] }` 或含 agentcenter |
 | 平台同步/发布 | 同上；sync 的 platform_type 需在 platforms 内；有 managers 的应用发布前需配置 publish_identity 且在名单内 |
 | 默认 Agent 持久化 | 主会话 + 用户发消息即可；无需额外配置 |
@@ -217,6 +238,7 @@
 
 ## 五、小结
 
+- **原生 Agent 保留**：安装插件并重启后，在 Agent 下拉中确认 build、plan 等 OpenCode 原生 agent 仍存在；可选 `replace_plan: false` 保留原生 plan。
 - **平台对接**：通过 Agent 列表选平台 Agent、/platform-sync、/platform-publish 及对应 tool 调用验证。
 - **平台独有工具**：选平台 Agent 后，用 platform_list_tools 查可用工具，再用 platform_invoke_tool 执行（当前 invokeTool 为 Mock）。
 - **多 Agent 与 Skill**：通过 list_available_subagents、list_available_skills、delegate_task、skill_inject_to_agent 在对话中让 Agent 执行即可验证。

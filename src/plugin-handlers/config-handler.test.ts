@@ -555,6 +555,46 @@ describe("Deadlock prevention - fetchAvailableModels must not receive client", (
   })
 })
 
+describe("OpenCode native agents preservation", () => {
+  test("incoming config.agent (build, plan, other native) are preserved and merged with plugin agents", async () => {
+    const createBuiltinAgentsMock = agents.createBuiltinAgents as unknown as {
+      mockResolvedValue: (value: Record<string, unknown>) => void
+    }
+    createBuiltinAgentsMock.mockResolvedValue({
+      sisyphus: { name: "sisyphus", prompt: "test", mode: "primary" },
+      explore: { name: "explore", prompt: "test", mode: "subagent" },
+    })
+    const pluginConfig: OhMyOpenCodeConfig = {
+      sisyphus_agent: { planner_enabled: true, replace_plan: false },
+    }
+    const config: Record<string, unknown> = {
+      model: "anthropic/claude-opus-4-5",
+      agent: {
+        build: { name: "build", description: "Native build agent", mode: "subagent" },
+        plan: { name: "plan", description: "Native plan agent", mode: "subagent" },
+        otherNative: { name: "otherNative", description: "Another native agent" },
+      },
+    }
+    const handler = createConfigHandler({
+      ctx: { directory: "/tmp" },
+      pluginConfig,
+      modelCacheState: {
+        anthropicContext1MEnabled: false,
+        modelContextLimitsCache: new Map(),
+      },
+    })
+    await handler(config)
+    const agentsRecord = config.agent as Record<string, Record<string, unknown>>
+    expect(agentsRecord.build).toBeDefined()
+    expect(agentsRecord.plan).toBeDefined()
+    expect(agentsRecord.plan?.description).toBe("Native plan agent")
+    expect(agentsRecord.otherNative).toBeDefined()
+    expect(agentsRecord.otherNative?.description).toBe("Another native agent")
+    expect(agentsRecord.sisyphus).toBeDefined()
+    expect(agentsRecord.explore).toBeDefined()
+  })
+})
+
 describe("Design doc 6.1 F3 / 6.5 I2 / 6.6 E1 - platform_agent config", () => {
   test("F3: 用户配置 agents 中手写 platform:name 覆盖平台为底、用户覆盖", async () => {
     const testDir = join(tmpdir(), `config-handler-f3-${Date.now()}`)

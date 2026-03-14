@@ -1,6 +1,6 @@
 # 基于 OMO 的 Agent 平台对接插件 · 设计文档
 
-**文档与实现一致性**：本文档同时描述**设计目标**与**当前实现**。设计范围内能力**已全部实现**（含 getAgentDetail、platforms/types、Skill 市场列表/下载/注入、skill_inject_to_agent tool、persistAgentSkill；**平台独有工具** platform_list_tools、platform_invoke_tool 及 adapter.invokeTool）。其中**部分能力当前为 Mock**，需在对接真实后端时替换，详见 **第 11.5 节「Mock 能力与后期改造要点」**。已实现与 Mock 清单见 **第 11 节**；实现阶段划分见 **3.7**。**对原 OMO 的修改**：逐文件说明见 **3.2.0**，**配置项新增与默认值**见 **3.2.0.1**，**Prompt 相关修改**见 **3.2.0.2**。
+**文档与实现一致性**：本文档同时描述**设计目标**与**当前实现**。设计范围内能力**已全部实现**（含 getAgentDetail、platforms/types、Skill 市场列表/下载/注入、skill_inject_to_agent tool、persistAgentSkill；**平台独有工具** platform_list_tools、platform_invoke_tool 及 adapter.invokeTool；**保留 OpenCode 原生 agents**：合并 config.agent 时以 OpenCode 传入为底，build、plan 等原生 agent 仍出现在列表中，用户侧验证见《fuyao-opencode-omo能力总结与终端验证》）。其中**部分能力当前为 Mock**，需在对接真实后端时替换，详见 **第 11.5 节「Mock 能力与后期改造要点」**。已实现与 Mock 清单见 **第 11 节**；实现阶段划分见 **3.7**。**对原 OMO 的修改**：逐文件说明见 **3.2.0**，**配置项新增与默认值**见 **3.2.0.1**，**Prompt 相关修改**见 **3.2.0.2**。
 
 ---
 
@@ -101,7 +101,7 @@
 
 | 原 OMO 路径 | 修改类型 | 具体修改内容 | 实现状态 |
 |-------------|----------|--------------|----------|
-| **`src/plugin-handlers/config-handler.ts`** | 修改 | ① 新增 `loadPlatformAgents(pluginConfig, directory)`：若 `platform_agent.enabled` 且 `platforms` 非空，则遍历 platforms 调用 `getPlatformAgentList`，经 `platformAppsToAgentRecord` 得到平台 agent 表；合并后调用 `writeVersionCache(platform, versionMap, directory)`。② 在合并 `config.agent` 时：先得到 `platformAgentRecord`，再与用户配置 `pluginConfig.agents` 按 key 合并（平台为底、用户覆盖）；对合并后的 agent 调用 `ensureSubagentsInOptions`。③ 合并完成后设置 `config.default_agent = pluginConfig.default_agent ?? ...`。 | ✓ 已实现 |
+| **`src/plugin-handlers/config-handler.ts`** | 修改 | ① 新增 `loadPlatformAgents(pluginConfig, directory)`：若 `platform_agent.enabled` 且 `platforms` 非空，则遍历 platforms 调用 `getPlatformAgentList`，经 `platformAppsToAgentRecord` 得到平台 agent 表；合并后调用 `writeVersionCache(platform, versionMap, directory)`。② 在合并 `config.agent` 时：**以 OpenCode 传入的 `config.agent` 为底**（保留 build、plan 等原生 agent），再叠加插件内置 agents、用户/项目/平台 agents；平台 agent 与用户覆盖合并顺序见 3.9.2。③ 对合并后的平台 agent 调用 `ensureSubagentsInOptions`。④ **build/plan**：仅当 `sisyphus_agent.default_builder_enabled: true` 时用插件 Builder 替换 build 并设为 hidden；`sisyphus_agent.replace_plan: true` 时用 Prometheus 替换 plan，否则保留 OpenCode 原生。⑤ 合并完成后设置 `config.default_agent = pluginConfig.default_agent ?? ...`。用户侧手动验证见《fuyao-opencode-omo能力总结与终端验证》「验证 OpenCode 原生 Agent（build、plan）保留」。 | ✓ 已实现 |
 | **`src/config/schema.ts`** | 修改 | ① 新增 `PlatformAgentConfigSchema`（enabled、platforms: fuyao/agentcenter[]）并挂到 `OhMyOpenCodeConfigSchema.platform_agent`。② 新增 `default_agent: z.string().optional()`。③ `AgentOverrideConfigSchema` 增加 `subagents`、`mcps`。④ `AgentOverridesSchema` 改为 `.catchall(AgentOverrideConfigSchema.optional())`，支持动态 key（如 `fuyao:CodeHelper`）用于平台 agent 覆盖。 | ✓ 已实现 |
 | **`src/index.ts`** | 修改 | 在 `event.message.updated` 中：当 sessionID 为主会话且 role 为 user 时，调用 `persistDefaultAgent(agent)`；若当前 agent 为平台 agent 则异步做版本校验，有更新时 `showToast`（防抖 Map<sessionID, Set<agentName>>）。注册 `platform_agent_publish`、`platform_agent_sync` tool；builtin-commands 含 platform-publish、platform-sync。 | ✓ 已实现 |
 | **`src/features/builtin-commands/commands.ts`** | 修改 | 增加 `platform-publish`、`platform-sync` 定义（template 引导使用对应 tool）。 | ✓ 已实现 |
@@ -231,7 +231,7 @@ src/
 ### 3.4 平台区分（fuyao / agentcenter）
 
 - **配置（用户侧）**：用户只配置**拉取类别**。`platform_agent.platforms: ("fuyao" | "agentcenter")[]` 表示要拉取并展示的平台，例如 `["fuyao"]`、`["agentcenter"]` 或 `["fuyao", "agentcenter"]`。连接与鉴权对用户黑盒，由实现或环境提供，不做 token 等校验配置暴露。
-- **OpenCode 感知方式**：插件通过 **config hook** 参与 OpenCode 的 config 合并。在 config-handler 中拉取平台列表后，将平台 agent **统一并入 `config.agent`**；OpenCode 使用的就是这份合并后的 config，agent 列表即包含内置 agent 与平台 agent，无需 OpenCode 侧任何额外感知逻辑。
+- **OpenCode 感知方式**：插件通过 **config hook** 参与 OpenCode 的 config 合并。在 config-handler 中**先保留 OpenCode 传入的 `config.agent`**（含 build、plan 等原生 agent），再叠加平台与插件 agents；合并后的 config 使 agent 列表同时包含**原生 agent**（build、plan 等）、**插件内置 agent**（Sisyphus、Oracle 等）与**平台 agent**（如 fuyao:CodeHelper），无需 OpenCode 侧任何额外感知逻辑。用户侧验证见《fuyao-opencode-omo能力总结与终端验证》第二节「验证 OpenCode 原生 Agent（build、plan）保留」。
 - **拉取**：config-handler 遍历 `platforms`，对每项调 `getPlatformAgentList(platformType)`（连接由实现侧解析），将各平台返回的列表合并进 `config.agent`；平台 agent 名带前缀（如 `fuyao:AppName`、`agentcenter:AppName`），避免跨平台重名且便于发布/同步时识别所属平台。
 - **API**：`platforms/fuyao.ts`、`platforms/agentcenter.ts` 实现同一接口；`api.ts` 按 platformType 调用。
 - **版本缓存**：按平台分 key（如 `.platform-agent-cache-fuyao.json`），互不覆盖。
@@ -321,6 +321,8 @@ src/
 - **用户覆盖来源**：config-handler 中用户侧 agent 覆盖来自 **`pluginConfig.agents`**（配置文件），不再用传入 config 的 agent。
 - **合并顺序**：先得到运行时的 `platformAgentRecord`，再与 `userAgentOverrides` 按 key 合并：若 key 在 platform 中存在，则 **`{ ...platformEntry, ...userOverride }`**（用户覆盖运行时）；仅出现在用户配置的 key 则直接使用。最终 `config.agent` 中手动配置可覆盖运行时写入，用于固定版本、配置 skills/mcps/subagents。
 - **实现位置**：`config/schema.ts`（agents catchall、subagents/mcps）；`plugin-handlers/config-handler.ts`（loadPlatformAgents、mergedPlatformAndUser 逻辑）。
+
+**保留 OpenCode 原生 agents（使用效果）**：插件写回 `config.agent` 时**先展开 OpenCode 传入的 `config.agent`**（即 OpenCode 自带的 build、plan 及其他原生 agent），再叠加插件提供的 agents（Sisyphus、平台 Agent 等），因此安装插件后用户仍能在 Agent 列表中看到 **build、plan** 等原生 agent。仅当配置 `sisyphus_agent.default_builder_enabled: true` 时，build 会被替换为插件的 OpenCode-Builder 并设为隐藏；`sisyphus_agent.replace_plan: true`（默认）时 plan 由 Prometheus 替代，设为 `false` 则保留 OpenCode 原生 plan。手动验证步骤见《fuyao-opencode-omo能力总结与终端验证》第二节「验证 OpenCode 原生 Agent（build、plan）保留」。
 
 #### 3.9.3 install 增量写入配置
 
