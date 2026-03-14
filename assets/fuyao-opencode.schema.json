@@ -3389,6 +3389,9 @@
               "agentcenter"
             ]
           }
+        },
+        "publish_identity": {
+          "type": "string"
         }
       }
     },
@@ -3404,6 +3407,12 @@
         "include_directory_in_available": {
           "type": "boolean"
         }
+      }
+    },
+    "skill_directories": {
+      "type": "array",
+      "items": {
+        "type": "string"
       }
     },
     "subagent_availability": {

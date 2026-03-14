@@ -814,6 +814,7 @@ OpenCode 合并多级配置（全局、项目、本地 plugin 目录等）时，
 | 安装插件 | 在**上述配置目录**执行 `bun add "file:..."` 或 `npm install fuyao-opencode` 等。**install 非必须**，可选执行 `bun node_modules/fuyao-opencode/dist/cli/index.js install` 自动写入 plugin 与 fuyao-opencode.json。 |
 | 声明插件 | 在配置目录的 `opencode.jsonc` 或 `opencode.json` 中设置 `"plugin": ["fuyao-opencode"]`；不跑 install 时需手动加。 |
 | 使用     | 运行 `opencode` 后，**发一次消息**触发插件完整加载，**关闭并重新打开 OpenCode** 后 agent 才会出现在列表。 |
+| **卸载** | 在配置目录的 `opencode.jsonc` 的 `plugin` 数组中**删除** `"fuyao-opencode"`，保存后重启 OpenCode 即停用；可选在同一目录执行 `bun remove fuyao-opencode` 或 `npm uninstall fuyao-opencode` 移除依赖包。当前无 `uninstall` 命令，需手动完成上述步骤。 |
 | 发布给用户 | 可选：发布到 npm 或从 GitHub 安装，无需强制发 npm。 |
 | plugin 手写？ | install 会自动写入 `plugin` 与可选配置；不跑 install 时需在配置目录手动加 `"fuyao-opencode"`。 |
 | 只有 npm/npx | 用户：`npm install fuyao-opencode`（或从 GitHub 安装），可选 `npx fuyao-opencode install`。开发者构建：可先 `npm install -g bun` 再 `bun run build`，或使用 GitHub 安装不本地构建。 |

@@ -194,7 +194,28 @@
 
 ---
 
-## 四、小结
+## 四、卸载插件
+
+在 OpenCode 中停用或移除本插件时，按安装时的**配置目录**操作（与安装位置一致）：
+
+1. **从 plugin 中移除**  
+   打开配置目录下的 `opencode.jsonc`（或 `opencode.json`），在 `plugin` 数组里**删除** `"fuyao-opencode"`。若数组中仅此一项，可改为 `"plugin": []` 或保留空数组。保存后，重启 OpenCode 即不再加载本插件。
+
+2. **（可选）移除依赖包**  
+   在**同一配置目录**下执行：
+   - 使用 Bun：`bun remove fuyao-opencode`
+   - 使用 npm：`npm uninstall fuyao-opencode`  
+   会从 `package.json` 和 `node_modules` 中移除该包，下次安装需重新执行 `bun add fuyao-opencode` 或 `npm install fuyao-opencode`。
+
+3. **（可选）清理本插件配置与缓存**  
+   - 配置目录下的 `fuyao-opencode.json`（或 OMO 配置中与本插件相关的段落）可手动删除或保留；删除后不再生效。  
+   - 项目目录下的 `.platform-agent-cache-fuyao.json`、`.platform-agent-cache-agentcenter.json` 为版本缓存，可按需删除。
+
+**说明**：当前未提供 `fuyao-opencode uninstall` 命令，以上为手动卸载步骤。仅完成第 1 步并重启 OpenCode 即可停用插件；第 2、3 步用于彻底移除包与本地配置/缓存。
+
+---
+
+## 五、小结
 
 - **平台对接**：通过 Agent 列表选平台 Agent、/platform-sync、/platform-publish 及对应 tool 调用验证。
 - **平台独有工具**：选平台 Agent 后，用 platform_list_tools 查可用工具，再用 platform_invoke_tool 执行（当前 invokeTool 为 Mock）。
@@ -202,4 +223,4 @@
 - **内置命令**：在输入框输入 /init-deep、/refactor、/ralph-loop、/platform-publish、/platform-sync 等触发。
 - **默认 Agent**：切换 Agent 并在主会话发一条消息后，查看配置文件中 `default_agent` 是否写回。
 
-当前平台列表/详情/发布、平台独有工具执行（invokeTool）与 Skill 市场列表/下载为 **Mock**；对接真实后端后替换适配器即可，上述触发方式仍适用。
+当前平台列表/详情/发布、平台独有工具执行（invokeTool）与 Skill 市场列表/下载为 **Mock**；对接真实后端后替换适配器即可，上述触发方式仍适用。**卸载**：从配置目录的 `opencode.jsonc` 的 `plugin` 中移除 `"fuyao-opencode"` 并重启 OpenCode；可选在同一目录执行 `bun remove fuyao-opencode` 或 `npm uninstall fuyao-opencode` 移除依赖包，详见上文「四、卸载插件」。
