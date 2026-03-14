@@ -252,13 +252,13 @@ describe("Design doc 6.1 - platform_agent_sync", () => {
 
 describe("Design doc 6.1 - platform_agent_publish", () => {
   test("成功后 version-cache 中该 name 的 version 更新", async () => {
-    // #given
+    // #given - CodeHelper has managers, so publish_identity must be set and in list
     const testDir = join(tmpdir(), `platform-publish-${Date.now()}`)
     mkdirSync(testDir, { recursive: true })
     const publishTool = createPlatformAgentPublishTool({
       directory: testDir,
       pluginConfig: {
-        platform_agent: { enabled: true, platforms: ["fuyao"] },
+        platform_agent: { enabled: true, platforms: ["fuyao"], publish_identity: "alice@example.com" },
       },
     })
 
@@ -274,6 +274,95 @@ describe("Design doc 6.1 - platform_agent_publish", () => {
     const cached = readVersionCache("fuyao", testDir)
     expect(cached["CodeHelper"]).toBeDefined()
 
+    try {
+      rmSync(testDir, { recursive: true })
+    } catch {
+      // ignore
+    }
+  })
+})
+
+describe("platform_agent_publish - managers 与 publish_identity 校验", () => {
+  test("Agent 有 managers 且未配置 publish_identity 时拒绝发布", async () => {
+    const testDir = join(tmpdir(), `platform-publish-no-id-${Date.now()}`)
+    mkdirSync(testDir, { recursive: true })
+    const publishTool = createPlatformAgentPublishTool({
+      directory: testDir,
+      pluginConfig: {
+        platform_agent: { enabled: true, platforms: ["fuyao"] },
+      },
+    })
+    const result = await publishTool.execute!(
+      { agent_name: "fuyao:CodeHelper" },
+      {} as any
+    )
+    expect(result).toContain("Error")
+    expect(result).toContain("publish_identity")
+    try {
+      rmSync(testDir, { recursive: true })
+    } catch {
+      // ignore
+    }
+  })
+
+  test("Agent 有 managers 且 publish_identity 不在名单内时拒绝发布", async () => {
+    const testDir = join(tmpdir(), `platform-publish-not-manager-${Date.now()}`)
+    mkdirSync(testDir, { recursive: true })
+    const publishTool = createPlatformAgentPublishTool({
+      directory: testDir,
+      pluginConfig: {
+        platform_agent: { enabled: true, platforms: ["fuyao"], publish_identity: "stranger@example.com" },
+      },
+    })
+    const result = await publishTool.execute!(
+      { agent_name: "fuyao:CodeHelper" },
+      {} as any
+    )
+    expect(result).toContain("Error")
+    expect(result).toContain("管理员名单")
+    try {
+      rmSync(testDir, { recursive: true })
+    } catch {
+      // ignore
+    }
+  })
+
+  test("Agent 有 managers 且 publish_identity 在名单内时允许发布", async () => {
+    const testDir = join(tmpdir(), `platform-publish-manager-ok-${Date.now()}`)
+    mkdirSync(testDir, { recursive: true })
+    const publishTool = createPlatformAgentPublishTool({
+      directory: testDir,
+      pluginConfig: {
+        platform_agent: { enabled: true, platforms: ["fuyao"], publish_identity: "bob" },
+      },
+    })
+    const result = await publishTool.execute!(
+      { agent_name: "fuyao:CodeHelper" },
+      {} as any
+    )
+    expect(result).toContain("Published")
+    try {
+      rmSync(testDir, { recursive: true })
+    } catch {
+      // ignore
+    }
+  })
+
+  test("Agent 无 managers 时无需 publish_identity 即可发布", async () => {
+    const testDir = join(tmpdir(), `platform-publish-no-managers-${Date.now()}`)
+    mkdirSync(testDir, { recursive: true })
+    const publishTool = createPlatformAgentPublishTool({
+      directory: testDir,
+      pluginConfig: {
+        platform_agent: { enabled: true, platforms: ["fuyao"] },
+      },
+    })
+    // DocAgent has no managers in mock
+    const result = await publishTool.execute!(
+      { agent_name: "fuyao:DocAgent" },
+      {} as any
+    )
+    expect(result).toContain("Published")
     try {
       rmSync(testDir, { recursive: true })
     } catch {

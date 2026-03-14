@@ -36,6 +36,11 @@ export interface PlatformAgentApp {
   tool_set?: PlatformToolItem[]
   agent_tool_set?: PlatformToolItem[]
   workflow_tool_set?: PlatformToolItem[]
+  /**
+   * Platform user ids (or identifiers) who have admin rights to this agent app.
+   * Only users in this list can publish changes to the platform; others can edit locally but cannot publish.
+   */
+  managers?: string[]
 }
 
 /** Single item in toolSet / agentToolSet / workflowToolSet (platform API shape). */

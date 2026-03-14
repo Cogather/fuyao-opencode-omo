@@ -26,7 +26,7 @@
 - **动态拉取**：从平台拉取应用列表，转换为 OpenCode agent 配置并合并进 config；支持同时配置扶摇与 AgentCenter（`platforms: ["fuyao", "agentcenter"]`），按 platforms 遍历拉取；连接与鉴权由实现侧管理，对用户黑盒，用户只配置拉取类别（fuyao / agentcenter / 都要）。版本缓存按平台分 key。所以：平台 agent 列表只在运行时合并进 config.agent，不会回写到用户配置里的 agents。
 - **手动覆盖**：支持在配置的 `agents` 中手动书写平台 agent 的 key，格式为 `platform:name`（冒号区分平台，name 与 mock/平台一致，如 `fuyao:CodeHelper`、`agentcenter:Reviewer`），用于覆盖运行时拉取结果、固定版本、配置 skills/mcps/subagents 等；合并时以「运行时平台条目为底、用户配置覆盖」，便于版本校验与本地调参。
 - **在线调测**：平台 Agent 在 OpenCode 中与本地 Agent 同等使用（选 Agent、发消息、调用 skill/MCP）。
-- **发布与同步**：提供 platform_agent_publish 将本地 Agent（含 skills、mcps、subagents）发布/更新到平台；提供 platform_agent_sync 拉取列表、与本地版本比对、force_refresh 更新缓存；版本校验通过 Toast 或同步返回文案提示更新。
+- **发布与同步**：提供 platform_agent_publish 将本地 Agent（含 skills、mcps、subagents）发布/更新到平台；提供 platform_agent_sync 拉取列表、与本地版本比对、force_refresh 更新缓存；版本校验通过 Toast 或同步返回文案提示更新。平台应用详情可含 **managers**（字符串数组，具备该应用管理员权限的人员标识）；配置项 **platform_agent.publish_identity** 表示当前用户身份；当应用存在非空 managers 时，仅当 publish_identity 在名单内才允许发布，其他人可本地修改但不能发布。
 
 #### 命令扩充
 
@@ -626,9 +626,9 @@ bun run test:design-doc
 
 | 用途 | 方法 | 说明 |
 |------|------|------|
-| 获取可用 Agent 列表 | GET | 返回应用列表，每项含 id、name、version、prompt、model、permission、mode、skills、mcps、subagents、updatedAt 等。 |
-| 获取单个应用详情 | GET | 按 id 或 name+version 返回完整信息。 |
-| 发布/更新应用 | POST/PUT | Body：name、prompt、model、permission、mode、skills、mcps、subagents 等；响应含 version 或确认。 |
+| 获取可用 Agent 列表 | GET | 返回应用列表，每项含 id、name、version、prompt、model、permission、mode、skills、mcps、subagents、updatedAt、**managers**（可选）等。 |
+| 获取单个应用详情 | GET | 按 id 或 name+version 返回完整信息；详情可含 **managers**（字符串数组，具备该应用管理员权限的人员标识列表）。 |
+| 发布/更新应用 | POST/PUT | Body：name、prompt、model、permission、mode、skills、mcps、subagents 等；响应含 version 或确认。发布前由插件根据 **managers** 与配置项 **publish_identity** 校验：仅当应用有 managers 且 publish_identity 在名单内时才允许发布，否则拒绝。 |
 
 - 鉴权与连接：由实现侧在 platforms/fuyao.ts、agentcenter.ts 内按环境或内部配置解析，不对用户暴露；path 差异在各 adapter 内适配。
 
@@ -875,6 +875,7 @@ OpenCode 合并多级配置（全局、项目、本地 plugin 目录等）时，
 | **delegate_task subagents 白名单** | `src/tools/delegate-task/executor.ts` | `resolveSubagentExecution` 中按 parent 的 `subagents`（getSubagentsFromEntry）过滤 callableAgents。 |
 | **平台 agent 的 tool 限制** | `src/shared/agent-tool-restrictions.ts` | 未在表内的 agent 返回 `{}`，平台 agent 等价于默认允许；非平台 agent 显式禁止 platform_invoke_tool、platform_list_tools。 |
 | **平台独有工具** | `src/features/platform-agent/`、`src/tools/platform-list-tools/`、`src/tools/platform-invoke-tool/` | PlatformAgentApp 含 tool_set、agent_tool_set、workflow_tool_set；platform-tool-registry 缓存；getPlatformAgentToolSets、invokePlatformTool；platform_list_tools、platform_invoke_tool 两 tool；config-handler 拉取后 setPlatformToolSets；适配器 invokeTool（**Mock**）。详见 `docs/平台Agent详情与独有工具字段兼容方案.md`。 |
+| **managers 与发布权限** | `src/features/platform-agent/types.ts`、`src/config/schema.ts`、`src/tools/platform-agent-publish/tools.ts` | PlatformAgentApp 含 **managers**（字符串数组）；配置 **platform_agent.publish_identity** 为当前用户身份。发布前若应用有非空 managers，则仅当 publish_identity 在名单内才允许发布，否则返回明确错误文案。 |
 | **default_agent 与持久化** | schema、config-handler、persist-default-agent、index 的 message.updated | 与 3.9.4 一致。 |
 | **assets schema** | `assets/fuyao-opencode.schema.json` | 存在。 |
 | **getPlatformAgentDetail** | `src/features/platform-agent/api.ts`、adapters | 接口 getAgentDetail(options)；api 层有则调适配器，否则从 list 查找；fuyao/agentcenter 适配器已实现（**Mock**：从 mock 列表按 id 或 name+version 查找）。 |

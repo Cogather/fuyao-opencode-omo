@@ -215,8 +215,8 @@
 
 ### 4.1 平台 Agent 类型与 mock 一致性
 
-- **PlatformAgentApp**（`src/features/platform-agent/types.ts`）：id、name、version、prompt、model、permission、skills、mcps、subagents、mode、description、skill_definitions、mcp_definitions、**tool_set**、**agent_tool_set**、**workflow_tool_set**。  
-  真实 API 返回的 JSON 需能映射到该结构；config-bridge 与 config-handler 不改，仅适配器做映射。platform-tool-registry 在 config-handler 拉取后按 agent 写入上述三类工具集，供 platform_list_tools / platform_invoke_tool 使用。
+- **PlatformAgentApp**（`src/features/platform-agent/types.ts`）：id、name、version、prompt、model、permission、skills、mcps、subagents、mode、description、skill_definitions、mcp_definitions、tool_set、agent_tool_set、workflow_tool_set、**managers**（字符串数组，具备该应用管理员权限的人员标识列表）。  
+  真实 API 返回的 JSON 需能映射到该结构；config-bridge 与 config-handler 不改，仅适配器做映射。platform-tool-registry 在 config-handler 拉取后按 agent 写入上述三类工具集，供 platform_list_tools / platform_invoke_tool 使用。**managers** 用于发布权限校验：配置项 **platform_agent.publish_identity** 表示当前用户身份，当应用存在非空 managers 时，仅当 publish_identity 在名单内才允许执行 platform_agent_publish。
 - **version-cache**：`VersionCacheMap = Record<string, string>`（name → version），按平台存于 `.platform-agent-cache-<platformType>.json`，路径由 `getCacheFilePath(platformType, directory)` 决定；写入由 config-handler 与 publish tool 完成，与 mock/真实无关，无需改。
 
 ### 4.2 Skill 市场类型与 mock 一致性
@@ -241,6 +241,7 @@
 - [ ] **platforms/fuyao.ts**：getAgentDetail 改为 GET 详情 API（按 id 或 name+version），响应 → `PlatformAgentApp`。
 - [ ] **platforms/fuyao.ts**：publishAgent 改为 POST/PUT 发布 API，body 含 name、prompt、model、skills、mcps、subagents 等，响应解析 version 并返回。
 - [ ] **platforms/agentcenter.ts**：同上三项。
+- [ ] 确认列表/详情 API 返回 **managers**（字符串数组）并映射到 PlatformAgentApp.managers，以便发布时做权限校验（publish_identity 与 managers 比对）。
 - [ ] 确认列表/详情/发布 API 的路径、Method、Header、错误码（如 401/403）在适配器内处理，不写脏 version-cache，错误向调用方抛出或返回明确文案。
 - [ ] **platforms/fuyao.ts**、**platforms/agentcenter.ts**：invokeTool 改为调用平台「工具执行」API（body 含 toolId、toolType、arguments），返回 InvokePlatformToolResult；鉴权在适配器内。
 - [ ] （可选）保留 mock-data.ts 与适配器内「开关」便于单测或离线演示。
@@ -261,6 +262,7 @@
 - config-bridge 的 platformAppToOpenCodeAgent、openCodeAgentToPlatformApp、platformAppsToAgentRecord。
 - persistAgentSkill、skill_inject_to_agent、opencode-skill-loader 对 market 目录的扫描。
 - platform_list_tools、platform_invoke_tool、platform-tool-registry、config-handler 内 setPlatformToolSets、agent-tool-restrictions 对平台工具的限定。
+- **platform_agent.publish_identity** 与 **managers** 发布权限校验逻辑（platform-agent-publish/tools.ts）；schema 中 platform_agent 已含 publish_identity。
 - schema 中 platform_agent、default_agent、agents 动态 key、AgentOverrideConfigSchema 的 subagents/mcps。
 
 ---

@@ -45,6 +45,16 @@ export function createPlatformAgentPublishTool(
       try {
         const apps = await getPlatformAgentList(platform)
         const base = apps.find((a) => a.name === appName)
+        if (base?.managers != null && base.managers.length > 0) {
+          const identity = (pluginConfig.platform_agent as { publish_identity?: string } | undefined)?.publish_identity?.trim()
+          if (!identity) {
+            return `Error: 该 Agent 应用配置了管理员名单（managers），发布前请在配置中设置 platform_agent.publish_identity（当前用户身份，如平台用户 id 或邮箱），以校验是否有发布权限。`
+          }
+          const allowed = base.managers.some((m) => m.trim() === identity)
+          if (!allowed) {
+            return `Error: 当前身份 "${identity}" 不在该 Agent 应用的管理员名单（managers）中，无法发布。仅名单内人员可发布到平台；您仍可本地修改。`
+          }
+        }
         const userOverride = pluginConfig.agents?.[args.agent_name] as Record<string, unknown> | undefined
         const entry = {
           name: args.agent_name,

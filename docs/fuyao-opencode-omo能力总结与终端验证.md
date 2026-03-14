@@ -22,7 +22,7 @@
 | **平台下发的 skill/MCP 定义合并** | 平台应用可带 `skill_definitions`、`mcp_definitions`；拉取时自动合并进 `config.command`、`config.mcp`，无需本地或市场已有同名项即可使用（Mock 中 CodeHelper 等已带示例）。 |
 | **平台 Agent 与主/子 Agent 一致使用** | 平台 Agent 以 `fuyao:CodeHelper`、`agentcenter:Reviewer` 等形式出现在 Agent 列表，可与内置 Agent 一样被选中、发消息、使用 skill/MCP。 |
 | **用户覆盖** | 在配置 `agents` 中手写 `fuyao:CodeHelper` 等 key，可覆盖平台拉取的 prompt、skills、mcps、subagents。 |
-| **发布到平台** | 将当前本地配置（含 prompt、skills、mcps、subagents）发布/更新到平台（当前 Mock 成功）。 |
+| **发布到平台** | 将当前本地配置（含 prompt、skills、mcps、subagents）发布/更新到平台（当前 Mock 成功）。平台应用详情可含 **managers**（管理员名单）；配置 **platform_agent.publish_identity** 为当前用户身份后，仅名单内人员可发布，其他人可本地修改但不能发布。 |
 | **同步与版本比对** | 拉取平台列表与本地 version-cache 比对，支持 force_refresh 覆盖缓存；有更新时通过 Toast 或同步返回文案提示。 |
 | **Subagent 白名单** | 平台 Agent 可配置 subagents；delegate_task 仅能调用该白名单内的 agent，实现 A→B→C 多层调用。 |
 | **平台独有工具（toolSet/agentToolSet/workflowToolSet）** | 平台应用详情可带 tool_set、agent_tool_set、workflow_tool_set；拉取后写入 platform-tool-registry。平台 Agent 可调用 **platform_list_tools** 查看可用 toolId 与描述，再通过 **platform_invoke_tool** 传入 tool_id、tool_type、arguments 执行；非平台 Agent 不可见上述两工具。适配器 invokeTool 当前为 Mock。 |
@@ -61,7 +61,7 @@
 
 | 能力 | 说明 |
 |------|------|
-| **platform_agent / default_agent 配置** | Schema 支持 `platform_agent: { enabled, platforms }`、`default_agent`；install 时默认写入。 |
+| **platform_agent / default_agent 配置** | Schema 支持 `platform_agent: { enabled, platforms, publish_identity? }`、`default_agent`；install 时默认写入。`publish_identity` 为当前用户身份（如平台用户 id 或邮箱），用于与应用详情中的 **managers** 比对：仅管理员名单内用户可执行发布。 |
 | **skill_directories 配置** | 可选 `skill_directories: string[]`，额外扫描的 skill 根目录；相对路径相对于当前工作目录解析。 |
 | **writeOmoConfig 增量合并** | 已存在配置文件时，新写入与已有配置 deepMerge，已有项优先，仅补充缺失。 |
 
@@ -111,6 +111,7 @@
   或按命令提示传入 agent_name，例如在后续对话中让 Agent 使用 tool 时填 `agent_name: "fuyao:CodeHelper"`。
 - **预期**：Agent 调用 `platform_agent_publish`，返回发布成功相关文案（当前 Mock 成功）；本地 version-cache 中该 name 的 version 会更新。
 - **错误验证**：若传入非 platform:name（如 `sisyphus`），应返回要求使用 `fuyao:Name` 或 `agentcenter:Name` 的 Error 文案。
+- **managers 校验**：若该应用配置了 **managers**（管理员名单），须在配置中设置 `platform_agent.publish_identity` 为当前用户身份（如 `alice@example.com`），且该身份在 managers 名单内才能发布；未配置 publish_identity 或身份不在名单内会返回明确错误（可本地修改，但不能发布）。
 
 ### 5. 验证「子 Agent 与 delegate_task」
 
@@ -185,7 +186,7 @@
 | 验证项 | 建议配置 / 前置 |
 |--------|------------------|
 | 平台 Agent 列表可见 | `platform_agent: { enabled: true, platforms: ["fuyao"] }` 或含 agentcenter |
-| 平台同步/发布 | 同上；sync 的 platform_type 需在 platforms 内 |
+| 平台同步/发布 | 同上；sync 的 platform_type 需在 platforms 内；有 managers 的应用发布前需配置 publish_identity 且在名单内 |
 | 默认 Agent 持久化 | 主会话 + 用户发消息即可；无需额外配置 |
 | Skill 注入 | 配置目录可写；skill 市场当前 Mock，id 见 mock-data |
 | 子 Agent / delegate | 使用的 Agent 在 config 中配置了 subagents（或平台拉取带 subagents） |
