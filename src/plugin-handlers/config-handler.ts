@@ -36,6 +36,7 @@ import {
   getPlatformAgentList,
   platformAppsToAgentRecord,
   writeVersionCache,
+  setPlatformToolSets,
 } from "../features/platform-agent";
 import type { PlatformType } from "../features/platform-agent";
 
@@ -114,6 +115,11 @@ async function loadPlatformAgents(
         if (app.mcp_definitions && Object.keys(app.mcp_definitions).length > 0) {
           Object.assign(platformMcpAdditions, app.mcp_definitions);
         }
+        setPlatformToolSets(platform, app.name, {
+          toolSet: app.tool_set,
+          agentToolSet: app.agent_tool_set,
+          workflowToolSet: app.workflow_tool_set,
+        });
       }
       const versionMap = Object.fromEntries(
         apps.map((a) => [a.name, a.version ?? "0"])

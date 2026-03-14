@@ -6,27 +6,37 @@
 import { describe, test, expect } from "bun:test"
 import { createPlatformAgentPublishTool } from "../../tools/platform-agent-publish"
 import { createPlatformAgentSyncTool } from "../../tools/platform-agent-sync"
+import { createPlatformListToolsTool } from "../../tools/platform-list-tools"
+import { createPlatformInvokeToolTool } from "../../tools/platform-invoke-tool"
 import { createSkillInjectToAgentTool } from "../../tools/skill-inject-to-agent"
 import { OhMyOpenCodeConfigSchema } from "../../config/schema"
 
 describe("Design doc 6.5 I4 - tool 注册", () => {
-  test("platform_agent_publish、platform_agent_sync、skill_inject_to_agent 均存在且 execute 可调用", () => {
+  test("platform_agent_publish、platform_agent_sync、platform_list_tools、platform_invoke_tool、skill_inject_to_agent 均存在且 execute 可调用", () => {
     const dir = process.cwd()
     const pluginConfig = { platform_agent: { enabled: true, platforms: ["fuyao"] } }
     const publishTool = createPlatformAgentPublishTool({ directory: dir, pluginConfig } as any)
     const syncTool = createPlatformAgentSyncTool({ directory: dir, pluginConfig } as any)
+    const listToolsTool = createPlatformListToolsTool()
+    const invokeToolTool = createPlatformInvokeToolTool()
     const skillInjectTool = createSkillInjectToAgentTool()
 
     const tools = {
       platform_agent_publish: publishTool,
       platform_agent_sync: syncTool,
+      platform_list_tools: listToolsTool,
+      platform_invoke_tool: invokeToolTool,
       skill_inject_to_agent: skillInjectTool,
     }
     expect(tools.platform_agent_publish).toBeDefined()
     expect(tools.platform_agent_sync).toBeDefined()
+    expect(tools.platform_list_tools).toBeDefined()
+    expect(tools.platform_invoke_tool).toBeDefined()
     expect(tools.skill_inject_to_agent).toBeDefined()
     expect(typeof tools.platform_agent_publish.execute).toBe("function")
     expect(typeof tools.platform_agent_sync.execute).toBe("function")
+    expect(typeof tools.platform_list_tools.execute).toBe("function")
+    expect(typeof tools.platform_invoke_tool.execute).toBe("function")
     expect(typeof tools.skill_inject_to_agent.execute).toBe("function")
   })
 })

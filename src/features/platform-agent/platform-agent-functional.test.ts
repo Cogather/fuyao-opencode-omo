@@ -294,6 +294,12 @@ describe("Design doc 6.1 - getAgentToolRestrictions(平台 agent 名)", () => {
     expect(restrictions).toEqual({})
   })
 
+  test("非平台 agent 时 platform_invoke_tool、platform_list_tools 被禁止", () => {
+    const restrictions = getAgentToolRestrictions("sisyphus")
+    expect(restrictions.platform_invoke_tool).toBe(false)
+    expect(restrictions.platform_list_tools).toBe(false)
+  })
+
   test("agentcenter agent name returns {}", () => {
     expect(getAgentToolRestrictions("agentcenter:Reviewer")).toEqual({})
   })

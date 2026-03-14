@@ -12,7 +12,7 @@
 |------|------|
 | **11 个内置 Agent** | Sisyphus（主编排）、Hephaestus（深度执行）、Atlas（编排）、Prometheus（规划）、Oracle、librarian、explore、multimodal-looker、sisyphus-junior 等，支持多模型降级与 Claude Code 兼容。 |
 | **34 个生命周期 Hook** | 会话恢复、Ralph Loop、Atlas 编排、Todo 续写、自动更新检查、关键词检测等。 |
-| **20+ Tools** | LSP、AST-Grep、delegate_task、call_omo_agent、skill、list_available_skills、list_available_subagents、platform_agent_publish、platform_agent_sync、skill_inject_to_agent 等。 |
+| **20+ Tools** | LSP、AST-Grep、delegate_task、call_omo_agent、skill、list_available_skills、list_available_subagents、platform_agent_publish、platform_agent_sync、**platform_list_tools**、**platform_invoke_tool**、skill_inject_to_agent 等。 |
 
 ### 2. 平台 Agent 对接（扶摇 / AgentCenter）
 
@@ -25,6 +25,7 @@
 | **发布到平台** | 将当前本地配置（含 prompt、skills、mcps、subagents）发布/更新到平台（当前 Mock 成功）。 |
 | **同步与版本比对** | 拉取平台列表与本地 version-cache 比对，支持 force_refresh 覆盖缓存；有更新时通过 Toast 或同步返回文案提示。 |
 | **Subagent 白名单** | 平台 Agent 可配置 subagents；delegate_task 仅能调用该白名单内的 agent，实现 A→B→C 多层调用。 |
+| **平台独有工具（toolSet/agentToolSet/workflowToolSet）** | 平台应用详情可带 tool_set、agent_tool_set、workflow_tool_set；拉取后写入 platform-tool-registry。平台 Agent 可调用 **platform_list_tools** 查看可用 toolId 与描述，再通过 **platform_invoke_tool** 传入 tool_id、tool_type、arguments 执行；非平台 Agent 不可见上述两工具。适配器 invokeTool 当前为 Mock。 |
 
 ### 3. 内置命令（Slash Commands）
 
@@ -164,6 +165,19 @@
 - **操作**：使用平台 Agent（如 fuyao:CodeHelper）在主会话发消息；若后端/缓存判断该 Agent 有版本更新（当前 Mock 可人为改缓存或适配器返回版本来模拟）。
 - **预期**：可能收到 Toast「Agent 有更新…可执行 /platform-sync」；同一 session+agent 防抖只提示一次。
 
+### 11. 验证「平台独有工具」platform_list_tools / platform_invoke_tool
+
+- **操作**：选择平台 Agent（如 **fuyao:CodeHelper**），在对话中让 Agent 先列出该 agent 可用的平台工具，再执行其中一个，例如：
+  ```text
+  请用 platform_list_tools 看一下 fuyao:CodeHelper 有哪些平台工具可用。
+  ```
+  再根据返回的 toolId 与 tool_type 调用：
+  ```text
+  请用 platform_invoke_tool 调用 fuyao:CodeHelper 的 fuyao-code-gen，tool_type 填 toolSet，arguments 可以传空对象。
+  ```
+- **预期**：platform_list_tools 返回 mock 中的 toolSet/workflowToolSet 等摘要（如 fuyao-code-gen、fuyao-pipeline-validate）；platform_invoke_tool 返回 Mock 文案（含 toolId、toolType）。仅当**当前选中的 agent** 为该平台 agent 时才能成功调用 platform_invoke_tool（否则会提示当前 agent 与请求的 agent_name 不一致）。
+- **说明**：非平台 Agent（如 sisyphus）无法使用 platform_list_tools、platform_invoke_tool（agent-tool-restrictions 已限制）。对接真实平台后，适配器 invokeTool 改为调平台执行接口即可。
+
 ---
 
 ## 三、配置与前置条件速查
@@ -175,14 +189,16 @@
 | 默认 Agent 持久化 | 主会话 + 用户发消息即可；无需额外配置 |
 | Skill 注入 | 配置目录可写；skill 市场当前 Mock，id 见 mock-data |
 | 子 Agent / delegate | 使用的 Agent 在 config 中配置了 subagents（或平台拉取带 subagents） |
+| 平台独有工具 | 当前 agent 为平台 Agent（如 fuyao:CodeHelper）；toolId、tool_type 以 platform_list_tools 返回为准；invokeTool 当前 Mock |
 
 ---
 
 ## 四、小结
 
 - **平台对接**：通过 Agent 列表选平台 Agent、/platform-sync、/platform-publish 及对应 tool 调用验证。
+- **平台独有工具**：选平台 Agent 后，用 platform_list_tools 查可用工具，再用 platform_invoke_tool 执行（当前 invokeTool 为 Mock）。
 - **多 Agent 与 Skill**：通过 list_available_subagents、list_available_skills、delegate_task、skill_inject_to_agent 在对话中让 Agent 执行即可验证。
 - **内置命令**：在输入框输入 /init-deep、/refactor、/ralph-loop、/platform-publish、/platform-sync 等触发。
 - **默认 Agent**：切换 Agent 并在主会话发一条消息后，查看配置文件中 `default_agent` 是否写回。
 
-当前平台列表/详情/发布与 Skill 市场列表/下载为 **Mock**；对接真实后端后替换适配器即可，上述触发方式仍适用。
+当前平台列表/详情/发布、平台独有工具执行（invokeTool）与 Skill 市场列表/下载为 **Mock**；对接真实后端后替换适配器即可，上述触发方式仍适用。

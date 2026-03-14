@@ -1,6 +1,6 @@
 # 基于 OMO 的 Agent 平台对接插件 · 设计文档
 
-**文档与实现一致性**：本文档同时描述**设计目标**与**当前实现**。设计范围内能力**已全部实现**（含 getAgentDetail、platforms/types、Skill 市场列表/下载/注入、skill_inject_to_agent tool、persistAgentSkill）。其中**部分能力当前为 Mock**，需在对接真实后端时替换，详见 **第 11.5 节「Mock 能力与后期改造要点」**。已实现与 Mock 清单见 **第 11 节**；实现阶段划分见 **3.7**。**对原 OMO 的修改**：逐文件说明见 **3.2.0**，**配置项新增与默认值**见 **3.2.0.1**，**Prompt 相关修改**见 **3.2.0.2**。
+**文档与实现一致性**：本文档同时描述**设计目标**与**当前实现**。设计范围内能力**已全部实现**（含 getAgentDetail、platforms/types、Skill 市场列表/下载/注入、skill_inject_to_agent tool、persistAgentSkill；**平台独有工具** platform_list_tools、platform_invoke_tool 及 adapter.invokeTool）。其中**部分能力当前为 Mock**，需在对接真实后端时替换，详见 **第 11.5 节「Mock 能力与后期改造要点」**。已实现与 Mock 清单见 **第 11 节**；实现阶段划分见 **3.7**。**对原 OMO 的修改**：逐文件说明见 **3.2.0**，**配置项新增与默认值**见 **3.2.0.1**，**Prompt 相关修改**见 **3.2.0.2**。
 
 ---
 
@@ -54,7 +54,7 @@
   - **配置层**：schema 中增加 `platform_agent`（enabled、platforms 数组：拉取类别）；连接与鉴权对用户黑盒，由实现或环境提供。✓ 已实现
   - **插件逻辑层**：config-handler 在合并 config 时拉取平台列表并合并、写 version-cache；index 注册 platform_agent_publish/platform_agent_sync、platform-publish/platform-sync command；message.updated 做版本校验与 Toast。✓ 已实现
   - **平台抽象层**：统一入口 `getPlatformAgentList` / `publishPlatformAgent`，按 platformType 调用 fuyao 或 agentcenter 的实现。✓ 已实现（publish 当前为 mock）
-  - **平台实现层**：`platforms/fuyao.ts`、`platforms/agentcenter.ts` 实现 getAgentList、getAgentDetail、publishAgent（**当前均为 Mock**）；对接真实 HTTP 时替换为真实请求，见 11.5。
+  - **平台实现层**：`platforms/fuyao.ts`、`platforms/agentcenter.ts` 实现 getAgentList、getAgentDetail、publishAgent、invokeTool（**当前均为 Mock**）；对接真实 HTTP 时替换为真实请求，见 11.5。
 - **数据流**：平台列表 → version-cache（按平台）+ config.agent；用户发布 → publishPlatformAgent → 更新 version-cache；版本校验 → 读缓存 + 拉列表比对 → Toast 或 sync 返回文案。✓ 已实现（发布/同步为 mock 或真实由适配器决定）
 
 ---
@@ -74,6 +74,7 @@
 | **platform_agent_publish / platform_agent_sync** | 发布到平台（带 skills/mcps/subagents）、同步与版本比对（含 force_refresh 写缓存）；以 tool 暴露，并可通过 command 调用。 | ✓ 已实现 |
 | **event / hook** | 用户发消息且当前为平台 Agent 时触发版本校验，必要时 showToast 提示。 | ✓ 已实现（persistDefaultAgent + 平台版本校验与 Toast，防抖） |
 | **delegate_task executor** | 解析 subagent 时若当前 agent 配置了 subagents，则仅允许该白名单内的 agent；与 agent-tool-restrictions 配合。 | ✓ 已实现 |
+| **平台独有工具** | toolSet/agentToolSet/workflowToolSet 经 platform-tool-registry 缓存；platform_list_tools、platform_invoke_tool 两 tool 仅对平台 agent 开放；适配器 invokeTool 当前为 Mock。 | ✓ 已实现 |
 
 ### 3.2 涉及修改的 OMO 原始文件与修改要点
 
@@ -440,20 +441,21 @@ src/
 
 ### 4.1 逻辑视图
 
-- **包/模块**：config（schema）、plugin-handlers（config-handler）、platform-agent（api、config-bridge、version-cache、platforms）、tools（platform-agent-publish、platform-agent-sync）、hooks（platform-agent-version-check 可选）、shared（agent-tool-restrictions）、delegate-task（executor）。
+- **包/模块**：config（schema）、plugin-handlers（config-handler）、platform-agent（api、config-bridge、version-cache、platform-tool-registry、platforms）、tools（platform-agent-publish、platform-agent-sync、platform-list-tools、platform-invoke-tool）、hooks（platform-agent-version-check 可选）、shared（agent-tool-restrictions）、delegate-task（executor）。
 - **依赖**：config-handler 依赖 platform-agent（api、config-bridge、version-cache）；index 依赖 config-handler、tools、hooks；publish/sync tools 依赖 platform-agent api 与 version-cache；executor 依赖 config/context 获取当前 agent 的 subagents。
 
 ### 4.2 开发视图
 
 - **目录结构**：见 3.3；OMO 原有 plugin-handlers、config、features、tools、shared 等在现有基础上做点状修改。
-- **接口边界**：platform-agent 对外暴露 getPlatformAgentList、**getPlatformAgentDetail**、publishPlatformAgent、readVersionCache、writeVersionCache、platformAppToOpenCodeAgent、openCodeAgentToPlatformApp；各 platform 实现 getAgentList、getAgentDetail、publishAgent（当前均为 Mock，见 11.5）。
+- **接口边界**：platform-agent 对外暴露 getPlatformAgentList、getPlatformAgentDetail、publishPlatformAgent、**getPlatformAgentToolSets**、**invokePlatformTool**、readVersionCache、writeVersionCache、platformAppToOpenCodeAgent、openCodeAgentToPlatformApp、setPlatformToolSets；各 platform 实现 getAgentList、getAgentDetail、publishAgent、**invokeTool**（当前均为 Mock，见 11.5）。
 
 ### 4.3 进程视图
 
 - **事件流**：用户发消息 → event message.updated → 取 agent/role → 若为平台 agent 则异步拉列表、读缓存、比对版本 → 若有更新则 showToast。
 - **同步流程**：用户执行 platform_agent_sync → 拉列表、读缓存、比对 → 若 force_refresh 则写缓存并返回「已刷新」；否则返回有更新列表或「与平台一致」。
 - **发布流程**：用户执行 platform_agent_publish → 从 config 取当前/指定 agent → openCodeAgentToPlatformApp → publishPlatformAgent → 成功后写 version-cache。
-- **配置加载**：OMO 加载 config → config-handler 合并 builtin/user/project/plugin 后 → 若启用平台则 getPlatformAgentList → 合并 + writeVersionCache。
+- **配置加载**：OMO 加载 config → config-handler 合并 builtin/user/project/plugin 后 → 若启用平台则 getPlatformAgentList → 合并 + writeVersionCache + setPlatformToolSets（tool_set/agent_tool_set/workflow_tool_set）。
+- **平台独有工具**：用户选用平台 Agent → 可调用 platform_list_tools(agent_name) 查看 toolSet/agentToolSet/workflowToolSet → platform_invoke_tool(agent_name, tool_id, tool_type, arguments) → api.invokePlatformTool → adapter.invokeTool（当前 Mock）。
 
 ### 4.4 物理视图
 
@@ -466,6 +468,7 @@ src/
 - **场景 2**：用户执行 /platform-sync → 返回「以下 Agent 有更新：…」或「当前与平台一致」；用户带 force_refresh 再执行 → 缓存更新并提示重开会话/重启。
 - **场景 3**：用户编辑 Agent 后执行发布 → 上传到平台并更新本地 version-cache。
 - **场景 4**：用户使用平台 Agent A，A 的 subagents 含 B；用户通过 delegate_task 调用 B → 仅当 B 在 A 的 subagents 列表内才允许执行。
+- **场景 5**：用户使用平台 Agent（如 fuyao:CodeHelper）→ 调用 platform_list_tools 获取可用 toolId 与描述 → 调用 platform_invoke_tool 传入 tool_id、tool_type、arguments → 适配器 invokeTool 调平台执行接口（当前 Mock 返回文案）。
 
 ---
 
@@ -551,7 +554,7 @@ src/
 | I1 | config 加载链路：启用 platform_agent，platforms 单平台/双平台 | 完整走 createConfigHandler → handler(config)；断言 config.agent 含对应平台 key、config.default_agent 正确；version-cache 文件存在且内容为 name→version。 | platform-agent-functional.test.ts（F1/F2 已覆盖部分） | ✓ 已覆盖 |
 | I2 | config 加载链路：关闭 platform_agent 或 platforms 为空 | config.agent 不包含平台 key；不写入 version-cache。 | src/plugin-handlers/config-handler.test.ts | ✓ 已覆盖 |
 | I3 | event message.updated + 平台 agent 版本校验 | 主会话、role=user、当前 agent 为平台 agent 时，异步拉列表与缓存比对；有更新时调用 ctx.client.tui.showToast；防抖后同 session+agent 不重复 Toast。 | 逻辑在 index；Toast 与防抖建议 E2E | 部分（逻辑已实现） |
-| I4 | tool 注册：platform_agent_publish、platform_agent_sync、skill_inject_to_agent | 插件返回的 tool 对象包含上述 key，且 execute 可调用。 | design-doc-capabilities.test.ts | ✓ 已覆盖 |
+| I4 | tool 注册：platform_agent_publish、platform_agent_sync、platform_list_tools、platform_invoke_tool、skill_inject_to_agent | 插件返回的 tool 对象包含上述 key，且 execute 可调用。 | design-doc-capabilities.test.ts | ✓ 已覆盖 |
 
 ---
 
@@ -870,7 +873,8 @@ OpenCode 合并多级配置（全局、项目、本地 plugin 目录等）时，
 | **openCodeAgentToPlatformApp / publishPlatformAgent** | config-bridge、api、adapters | openCodeAgentToPlatformApp 将 OpenCode entry 转为 PlatformAgentApp；publishPlatformAgent 调用 adapter.publishAgent 或 mock；fuyao/agentcenter 适配器已实现 publishAgent（mock）。 |
 | **agents 动态 key 与覆盖** | `src/config/schema.ts` | `AgentOverridesSchema.catchall`、`AgentOverrideConfigSchema` 含 `subagents`、`mcps`；合并顺序与 3.9.2 一致。 |
 | **delegate_task subagents 白名单** | `src/tools/delegate-task/executor.ts` | `resolveSubagentExecution` 中按 parent 的 `subagents`（getSubagentsFromEntry）过滤 callableAgents。 |
-| **平台 agent 的 tool 限制** | `src/shared/agent-tool-restrictions.ts` | 未在表内的 agent 返回 `{}`，平台 agent 等价于默认允许。 |
+| **平台 agent 的 tool 限制** | `src/shared/agent-tool-restrictions.ts` | 未在表内的 agent 返回 `{}`，平台 agent 等价于默认允许；非平台 agent 显式禁止 platform_invoke_tool、platform_list_tools。 |
+| **平台独有工具** | `src/features/platform-agent/`、`src/tools/platform-list-tools/`、`src/tools/platform-invoke-tool/` | PlatformAgentApp 含 tool_set、agent_tool_set、workflow_tool_set；platform-tool-registry 缓存；getPlatformAgentToolSets、invokePlatformTool；platform_list_tools、platform_invoke_tool 两 tool；config-handler 拉取后 setPlatformToolSets；适配器 invokeTool（**Mock**）。详见 `docs/平台Agent详情与独有工具字段兼容方案.md`。 |
 | **default_agent 与持久化** | schema、config-handler、persist-default-agent、index 的 message.updated | 与 3.9.4 一致。 |
 | **assets schema** | `assets/fuyao-opencode.schema.json` | 存在。 |
 | **getPlatformAgentDetail** | `src/features/platform-agent/api.ts`、adapters | 接口 getAgentDetail(options)；api 层有则调适配器，否则从 list 查找；fuyao/agentcenter 适配器已实现（**Mock**：从 mock 列表按 id 或 name+version 查找）。 |
@@ -903,6 +907,7 @@ OpenCode 合并多级配置（全局、项目、本地 plugin 目录等）时，
 | **平台 Agent 发布** | 适配器 `publishAgent` 直接 resolve `{ version: app.version ?? "1.0.0" }`，无网络请求。 | 替换为 POST/PUT 平台发布 API；body 含 name、prompt、model、skills、mcps、subagents 等；响应解析 version 并写 version-cache。 |
 | **Skill 市场列表** | `features/skill-market/api.ts` 中 `getSkillMarketListFromMock` 返回 `MOCK_SKILL_MARKET_ITEMS`；`getSkillMarketList` 仅用 mock。 | 接入真实 Skill 市场列表/搜索 API；返回 `SkillMarketItem[]`（id、name、version、description、downloadUrl 等）；可保留分页与 query 参数。 |
 | **Skill 市场下载** | `downloadSkillToMarket` 仅在本地创建目录并写入占位 `SKILL.md`，未从 downloadUrl 拉包。 | 使用 `SkillMarketItem.downloadUrl`（或平台包地址）拉取包并解压到 `getMarketSkillsDir()/<skillId>/`；保证目录内含 `SKILL.md` 及 frontmatter name。 |
+| **平台独有工具执行** | 适配器 `invokeTool` 直接返回 `{ success: true, output: "…" }`，无真实 HTTP 调平台执行接口。 | 替换为调用平台约定的「工具执行」API（如 POST /tool/run）；body 含 toolId、toolType、arguments；鉴权在适配器内；返回 InvokePlatformToolResult。 |
 
-**说明**：version-cache、config-handler 合并、发布/同步 tool、版本校验 Toast、openCodeAgentToPlatformApp、persistAgentSkill、skill_inject_to_agent、opencode-skill-loader 对 market 目录的扫描等**非 Mock**，无需因对接真实 API 而改动逻辑，仅需保证适配器返回结构与类型一致。
+**说明**：version-cache、config-handler 合并、发布/同步 tool、版本校验 Toast、openCodeAgentToPlatformApp、persistAgentSkill、skill_inject_to_agent、opencode-skill-loader 对 market 目录的扫描、platform_list_tools/platform_invoke_tool 及 platform-tool-registry 等**非 Mock**，无需因对接真实 API 而改动逻辑，仅需保证适配器返回结构与类型一致。
 

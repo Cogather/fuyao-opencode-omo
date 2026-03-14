@@ -13,6 +13,7 @@
 | 平台 Agent 发布 | publishAgent 直接 resolve 版本无 HTTP | platforms/fuyao.ts、platforms/agentcenter.ts | platform_agent_publish tool、version-cache 更新 |
 | Skill 市场列表 | getSkillMarketList 使用 mock 数组 | skill-market/api.ts、mock-data.ts | 列表/分页/query、skill_inject_to_agent 可选 skill_id |
 | Skill 市场下载 | downloadSkillToMarket 仅写占位 SKILL.md，不拉包 | skill-market/api.ts | skill_inject_to_agent、市场 skill 本地可用 |
+| 平台独有工具执行 | adapter.invokeTool 直接返回 success+output 文案，无 HTTP 调平台 | platforms/fuyao.ts、platforms/agentcenter.ts | platform_invoke_tool 的 execute 结果 |
 
 以下各节展开上述每类的：**API 与调用方式**、**数据与结构**、**功能逻辑**，以及**替换位置与替换细节**。
 
@@ -123,6 +124,34 @@
 
 ---
 
+### 2.4 平台独有工具执行（invokeTool）
+
+#### API 与调用方式
+
+- **入口**：`invokePlatformTool(platformType, options)`  
+  - 文件：`src/features/platform-agent/api.ts`  
+  - 实现：`getPlatformAdapter(platformType).invokeTool(options)`；若适配器无 invokeTool 则返回 `{ success: false, error: "Platform does not support tool invocation" }`。
+- **适配器**：`platforms/fuyao.ts`、`platforms/agentcenter.ts` 的 `invokeTool(options)` 直接 resolve `{ success: true, output: "[Fuyao/AgentCenter mock] Invoked tool ..." }`，无 HTTP 请求。
+
+#### 数据与结构
+
+- 入参：`InvokePlatformToolOptions`（agentName、toolId、toolType、arguments?）。
+- 返回：`InvokePlatformToolResult`（success、output?、error?）。
+- **调用链**：platform_invoke_tool 的 execute → 校验当前 agent 与 agent_name 一致（平台 agent 时）→ invokePlatformTool(platform, options) → adapter.invokeTool(options)。
+
+#### 功能逻辑（当前 Mock 行为）
+
+- 不请求平台「工具执行」接口，仅返回固定格式文案；tool_set/agent_tool_set/workflow_tool_set 来自 mock-data，config-handler 拉取后写入 platform-tool-registry 供 platform_list_tools 使用。
+
+#### 替换为真实 API 时的位置与要点
+
+| 位置 | 文件 | 行/函数 | 替换要点 |
+|------|------|---------|----------|
+| 扶摇工具执行 | `src/features/platform-agent/platforms/fuyao.ts` | `invokeTool` 整个实现 | 改为调用平台约定的工具执行 API（如 POST xxx/tool/run）；body 含 toolId、toolType、arguments；鉴权在适配器内；解析响应为 InvokePlatformToolResult。 |
+| AgentCenter 工具执行 | `src/features/platform-agent/platforms/agentcenter.ts` | `invokeTool` 整个实现 | 同上，按 AgentCenter 执行接口与 body 约定实现。 |
+
+---
+
 ## 三、Skill 市场相关 Mock
 
 ### 3.1 Skill 市场列表（getSkillMarketList / getSkillMarketListAll）
@@ -186,8 +215,8 @@
 
 ### 4.1 平台 Agent 类型与 mock 一致性
 
-- **PlatformAgentApp**（`src/features/platform-agent/types.ts`）：id、name、version、prompt、model、permission、skills、mcps、subagents、mode、description、skill_definitions、mcp_definitions。  
-  真实 API 返回的 JSON 需能映射到该结构；config-bridge 与 config-handler 不改，仅适配器做映射。
+- **PlatformAgentApp**（`src/features/platform-agent/types.ts`）：id、name、version、prompt、model、permission、skills、mcps、subagents、mode、description、skill_definitions、mcp_definitions、**tool_set**、**agent_tool_set**、**workflow_tool_set**。  
+  真实 API 返回的 JSON 需能映射到该结构；config-bridge 与 config-handler 不改，仅适配器做映射。platform-tool-registry 在 config-handler 拉取后按 agent 写入上述三类工具集，供 platform_list_tools / platform_invoke_tool 使用。
 - **version-cache**：`VersionCacheMap = Record<string, string>`（name → version），按平台存于 `.platform-agent-cache-<platformType>.json`，路径由 `getCacheFilePath(platformType, directory)` 决定；写入由 config-handler 与 publish tool 完成，与 mock/真实无关，无需改。
 
 ### 4.2 Skill 市场类型与 mock 一致性
@@ -213,6 +242,7 @@
 - [ ] **platforms/fuyao.ts**：publishAgent 改为 POST/PUT 发布 API，body 含 name、prompt、model、skills、mcps、subagents 等，响应解析 version 并返回。
 - [ ] **platforms/agentcenter.ts**：同上三项。
 - [ ] 确认列表/详情/发布 API 的路径、Method、Header、错误码（如 401/403）在适配器内处理，不写脏 version-cache，错误向调用方抛出或返回明确文案。
+- [ ] **platforms/fuyao.ts**、**platforms/agentcenter.ts**：invokeTool 改为调用平台「工具执行」API（body 含 toolId、toolType、arguments），返回 InvokePlatformToolResult；鉴权在适配器内。
 - [ ] （可选）保留 mock-data.ts 与适配器内「开关」便于单测或离线演示。
 
 ### 5.2 Skill 市场
@@ -230,6 +260,7 @@
 - version-cache 的读/写、getCacheFilePath。
 - config-bridge 的 platformAppToOpenCodeAgent、openCodeAgentToPlatformApp、platformAppsToAgentRecord。
 - persistAgentSkill、skill_inject_to_agent、opencode-skill-loader 对 market 目录的扫描。
+- platform_list_tools、platform_invoke_tool、platform-tool-registry、config-handler 内 setPlatformToolSets、agent-tool-restrictions 对平台工具的限定。
 - schema 中 platform_agent、default_agent、agents 动态 key、AgentOverrideConfigSchema 的 subagents/mcps。
 
 ---

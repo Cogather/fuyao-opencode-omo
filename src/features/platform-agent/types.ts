@@ -29,6 +29,42 @@ export interface PlatformAgentApp {
    * When present, merged into config.mcp so platform-pulled agents can use MCPs without local config.
    */
   mcp_definitions?: Record<string, Record<string, unknown>>
+  /**
+   * Platform-specific tools: toolId + description; executed via platform API (invokeTool).
+   * When present, exposed via platform_list_tools / platform_invoke_tool.
+   */
+  tool_set?: PlatformToolItem[]
+  agent_tool_set?: PlatformToolItem[]
+  workflow_tool_set?: PlatformToolItem[]
+}
+
+/** Single item in toolSet / agentToolSet / workflowToolSet (platform API shape). */
+export interface PlatformToolItem {
+  toolId: string
+  description?: string
+  [k: string]: unknown
+}
+
+export type PlatformToolType = "toolSet" | "agentToolSet" | "workflowToolSet"
+
+/** Options for invoking a platform tool via adapter.invokeTool. */
+export interface InvokePlatformToolOptions {
+  /** Agent app name (e.g. CodeHelper) or config key (e.g. fuyao:CodeHelper). */
+  agentName: string
+  /** Platform tool id from toolSet/agentToolSet/workflowToolSet. */
+  toolId: string
+  /** Which set the tool belongs to. */
+  toolType: PlatformToolType
+  /** Request body for the platform execute API (platform-specific). */
+  arguments?: Record<string, unknown>
+}
+
+/** Result of invokeTool (platform execute API response). */
+export interface InvokePlatformToolResult {
+  success: boolean
+  output?: string
+  error?: string
+  [k: string]: unknown
 }
 
 export interface GetAgentListOptions {
@@ -51,11 +87,13 @@ export interface GetAgentDetailOptions {
   version?: string
 }
 
-/** Adapter per platform: list + optional detail + optional publish. Connection/auth inside impl. */
+/** Adapter per platform: list + optional detail + optional publish + optional invokeTool. Connection/auth inside impl. */
 export interface IPlatformAdapter {
   getAgentList(options?: GetAgentListOptions): Promise<PlatformAgentApp[]>
   /** Optional: get single app by id or name+version. When absent, api layer may fallback to list. */
   getAgentDetail?(options: GetAgentDetailOptions): Promise<PlatformAgentApp | null>
   /** Optional: publish/update app on platform. When absent, api layer mocks success. */
   publishAgent?(app: PlatformAgentApp): Promise<PublishResult>
+  /** Optional: invoke a platform-specific tool (toolSet/agentToolSet/workflowToolSet). */
+  invokeTool?(options: InvokePlatformToolOptions): Promise<InvokePlatformToolResult>
 }

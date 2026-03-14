@@ -10,8 +10,11 @@ import type {
   GetAgentListOptions,
   GetAgentDetailOptions,
   PublishResult,
+  InvokePlatformToolOptions,
+  InvokePlatformToolResult,
 } from "./types"
 import { getPlatformAdapter } from "./platforms"
+import { getPlatformToolSets } from "./platform-tool-registry"
 
 export async function getPlatformAgentList(
   platformType: PlatformType,
@@ -57,4 +60,45 @@ export async function publishPlatformAgent(
     return adapter.publishAgent(app)
   }
   return Promise.resolve({ version: app.version ?? "1.0.0" })
+}
+
+/** Tool sets for a platform agent (toolSet / agentToolSet / workflowToolSet). From registry or getAgentDetail. */
+export interface PlatformAgentToolSets {
+  toolSet: Array<{ toolId: string; description?: string; [k: string]: unknown }>
+  agentToolSet: Array<{ toolId: string; description?: string; [k: string]: unknown }>
+  workflowToolSet: Array<{ toolId: string; description?: string; [k: string]: unknown }>
+}
+
+export async function getPlatformAgentToolSets(
+  platformType: PlatformType,
+  agentName: string
+): Promise<PlatformAgentToolSets> {
+  const fromCache = getPlatformToolSets(platformType, agentName)
+  if (fromCache) {
+    return {
+      toolSet: fromCache.toolSet ?? [],
+      agentToolSet: fromCache.agentToolSet ?? [],
+      workflowToolSet: fromCache.workflowToolSet ?? [],
+    }
+  }
+  const detail = await getPlatformAgentDetail(platformType, { name: agentName })
+  return {
+    toolSet: detail?.tool_set ?? [],
+    agentToolSet: detail?.agent_tool_set ?? [],
+    workflowToolSet: detail?.workflow_tool_set ?? [],
+  }
+}
+
+export async function invokePlatformTool(
+  platformType: PlatformType,
+  options: InvokePlatformToolOptions
+): Promise<InvokePlatformToolResult> {
+  const adapter = getPlatformAdapter(platformType)
+  if (typeof adapter.invokeTool === "function") {
+    return adapter.invokeTool(options)
+  }
+  return Promise.resolve({
+    success: false,
+    error: "Platform does not support tool invocation",
+  })
 }

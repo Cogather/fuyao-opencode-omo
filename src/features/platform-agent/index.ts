@@ -1,5 +1,14 @@
-export type { PlatformType, PlatformAgentApp, IPlatformAdapter, GetAgentListOptions } from "./types"
-export { getPlatformAgentList, getPlatformAgentDetail, publishPlatformAgent } from "./api"
+export type {
+  PlatformType,
+  PlatformAgentApp,
+  IPlatformAdapter,
+  GetAgentListOptions,
+  PlatformToolItem,
+  PlatformToolType,
+  InvokePlatformToolOptions,
+  InvokePlatformToolResult,
+} from "./types"
+export { getPlatformAgentList, getPlatformAgentDetail, publishPlatformAgent, getPlatformAgentToolSets, invokePlatformTool } from "./api"
 export {
   platformAppToOpenCodeAgent,
   platformAppsToAgentRecord,
@@ -14,3 +23,4 @@ export {
   type VersionCacheMap,
 } from "./version-cache"
 export { PLATFORM_AGENT_CACHE_PREFIX } from "./constants"
+export { setPlatformToolSets, getPlatformToolSets, type PlatformToolSets } from "./platform-tool-registry"

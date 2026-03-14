@@ -53,6 +53,8 @@ export {
 } from "./delegate-task"
 export { createPlatformAgentPublishTool } from "./platform-agent-publish"
 export { createPlatformAgentSyncTool } from "./platform-agent-sync"
+export { createPlatformListToolsTool } from "./platform-list-tools"
+export { createPlatformInvokeToolTool } from "./platform-invoke-tool"
 export { createSkillInjectToAgentTool } from "./skill-inject-to-agent"
 
 export function createBackgroundTools(manager: BackgroundManager, client: OpencodeClient): Record<string, ToolDefinition> {

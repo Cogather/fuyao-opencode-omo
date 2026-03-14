@@ -24,6 +24,7 @@ const SCOPE_PRIORITY: Record<SkillScope, number> = {
   opencode: 4,
   project: 5,
   "opencode-project": 6,
+  custom: 7,
 }
 
 function builtinToLoaded(builtin: BuiltinSkill): LoadedSkill {

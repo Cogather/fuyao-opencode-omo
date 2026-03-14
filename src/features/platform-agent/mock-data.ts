@@ -44,6 +44,13 @@ export const MOCK_FUYAO_AGENTS: PlatformAgentApp[] = [
     mcp_definitions: {
       "platform-helper-mcp": { ...MOCK_PLATFORM_MCP },
     },
+    tool_set: [
+      { toolId: "fuyao-code-gen", description: "Platform code generation tool (mock)." },
+      { toolId: "fuyao-refactor-hint", description: "Refactoring suggestion tool (mock)." },
+    ],
+    workflow_tool_set: [
+      { toolId: "fuyao-pipeline-validate", description: "Validate code pipeline (mock)." },
+    ],
   },
   {
     id: "fuyao-doc-agent",
@@ -104,6 +111,9 @@ export const MOCK_AGENTCENTER_AGENTS: PlatformAgentApp[] = [
     prompt: AGENTCENTER_MOCK_SYSTEM_PROMPT + "\nFocus: code review and suggestions.",
     description: "AgentCenter 评审助手（Mock）",
     subagents: ["agentcenter:StyleChecker", "agentcenter:SecurityScan"],
+    tool_set: [
+      { toolId: "ac-review-suggest", description: "Code review suggestion tool (mock)." },
+    ],
   },
   {
     id: "ac-qa",

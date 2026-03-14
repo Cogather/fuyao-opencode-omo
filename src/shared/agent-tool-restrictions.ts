@@ -4,6 +4,19 @@
  * true = tool allowed, false = tool denied.
  */
 
+/** Platform-only tools: only fuyao:* and agentcenter:* agents may use these. */
+const PLATFORM_ONLY_TOOLS: Record<string, boolean> = {
+  platform_invoke_tool: false,
+  platform_list_tools: false,
+}
+
+function isPlatformAgentName(agentName: string): boolean {
+  return (
+    (agentName.startsWith("fuyao:") || agentName.startsWith("agentcenter:")) &&
+    agentName.length > 6
+  )
+}
+
 const EXPLORATION_AGENT_DENYLIST: Record<string, boolean> = {
   write: false,
   edit: false,
@@ -35,9 +48,14 @@ const AGENT_RESTRICTIONS: Record<string, Record<string, boolean>> = {
 }
 
 export function getAgentToolRestrictions(agentName: string): Record<string, boolean> {
-  return AGENT_RESTRICTIONS[agentName]
-    ?? Object.entries(AGENT_RESTRICTIONS).find(([key]) => key.toLowerCase() === agentName.toLowerCase())?.[1]
-    ?? {}
+  const base =
+    AGENT_RESTRICTIONS[agentName] ??
+    Object.entries(AGENT_RESTRICTIONS).find(([key]) => key.toLowerCase() === agentName.toLowerCase())?.[1] ??
+    {}
+  if (!isPlatformAgentName(agentName)) {
+    return { ...base, ...PLATFORM_ONLY_TOOLS }
+  }
+  return base
 }
 
 export function hasAgentToolRestrictions(agentName: string): boolean {

@@ -9,6 +9,8 @@ import type {
   GetAgentListOptions,
   GetAgentDetailOptions,
   PublishResult,
+  InvokePlatformToolOptions,
+  InvokePlatformToolResult,
 } from "../types"
 import { MOCK_FUYAO_AGENTS } from "../mock-data"
 
@@ -31,5 +33,11 @@ export const fuyaoAdapter: IPlatformAdapter = {
   },
   async publishAgent(app: PlatformAgentApp): Promise<PublishResult> {
     return { version: app.version ?? "1.0.0" }
+  },
+  async invokeTool(options: InvokePlatformToolOptions): Promise<InvokePlatformToolResult> {
+    return {
+      success: true,
+      output: `[Fuyao mock] Invoked tool ${options.toolId} (${options.toolType}) for agent ${options.agentName}. Arguments: ${JSON.stringify(options.arguments ?? {})}`,
+    }
   },
 }

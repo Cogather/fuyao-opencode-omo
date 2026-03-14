@@ -3,7 +3,7 @@
  */
 
 import { describe, test, expect } from "bun:test"
-import { getPlatformAgentList, getPlatformAgentDetail } from "./api"
+import { getPlatformAgentList, getPlatformAgentDetail, getPlatformAgentToolSets, invokePlatformTool } from "./api"
 
 describe("platform-agent api (design doc 6.1 F12)", () => {
   test("getPlatformAgentList returns list for fuyao and agentcenter", async () => {
@@ -35,5 +35,24 @@ describe("platform-agent api (design doc 6.1 F12)", () => {
     })
     expect(withVersion).not.toBeNull()
     expect(withVersion!.version).toBe("1.0.0")
+  })
+
+  test("getPlatformAgentToolSets returns toolSet/agentToolSet/workflowToolSet for agent with tools", async () => {
+    const sets = await getPlatformAgentToolSets("fuyao", "CodeHelper")
+    expect(sets.toolSet.length).toBeGreaterThan(0)
+    expect(sets.toolSet.some((t) => t.toolId === "fuyao-code-gen")).toBe(true)
+    expect(sets.workflowToolSet.some((t) => t.toolId === "fuyao-pipeline-validate")).toBe(true)
+  })
+
+  test("invokePlatformTool calls adapter and returns result", async () => {
+    const result = await invokePlatformTool("fuyao", {
+      agentName: "CodeHelper",
+      toolId: "fuyao-code-gen",
+      toolType: "toolSet",
+      arguments: { input: "test" },
+    })
+    expect(result.success).toBe(true)
+    expect(result.output).toContain("fuyao-code-gen")
+    expect(result.output).toContain("toolSet")
   })
 })
