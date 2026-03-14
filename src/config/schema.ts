@@ -441,6 +441,11 @@ export const OhMyOpenCodeConfigSchema = z.object({
   /** Control which skills are shown as available per agent (builtin / directory vs only agent.skills). */
   skill_availability: SkillAvailabilityConfigSchema.optional(),
   /**
+   * Additional directories to scan for skills. Paths are resolved relative to the current working directory (project root) if not absolute.
+   * Each directory is scanned one level deep for subdirs containing SKILL.md or {name}.md (same convention as .opencode/skills).
+   */
+  skill_directories: z.array(z.string()).optional(),
+  /**
    * Control subagent visibility and delegation. Same idea as skill_availability (builtin vs directory).
    * - true: full list visible and usable.
    * - false or object: only agent.subagents + include_builtin_in_available / include_directory_in_available (default both false).

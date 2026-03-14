@@ -1,11 +1,12 @@
 import { promises as fs } from "fs"
-import { join, basename } from "path"
+import { join, basename, resolve } from "path"
 import yaml from "js-yaml"
 import { parseFrontmatter } from "../../shared/frontmatter"
 import { sanitizeModelField } from "../../shared/model-sanitizer"
 import { resolveSymlinkAsync, isMarkdownFile } from "../../shared/file-utils"
 import { getClaudeConfigDir } from "../../shared"
-import { getOpenCodeConfigDir, getMarketSkillsDir } from "../../shared/opencode-config-dir"
+import { getOpenCodeConfigDir, getMarketSkillsDir, getOpenCodeConfigPaths } from "../../shared/opencode-config-dir"
+import { readJsoncFile } from "../../shared/jsonc-parser"
 import type { CommandDefinition } from "../claude-code-command-loader/types"
 import type { SkillScope, SkillMetadata, LoadedSkill, LazyContentLoader } from "./types"
 import type { SkillMcpConfig } from "../skill-mcp-manager/types"
@@ -256,13 +257,36 @@ export async function discoverProjectClaudeSkills(): Promise<LoadedSkill[]> {
   return loadSkillsFromDir(projectSkillsDir, "project")
 }
 
+/** Read skill_directories from OMO config; paths resolved relative to cwd if not absolute. */
+function getCustomSkillDirectories(): string[] {
+  const paths = getOpenCodeConfigPaths({ binary: "opencode" })
+  const raw = readJsoncFile<{ skill_directories?: string[] }>(paths.omoConfig)
+  const dirs = raw?.skill_directories
+  if (!Array.isArray(dirs) || dirs.length === 0) return []
+  const cwd = process.cwd()
+  return dirs
+    .filter((d): d is string => typeof d === "string" && d.trim().length > 0)
+    .map((d) => resolve(cwd, d))
+}
+
+/** Load skills from config.skill_directories (scope: custom). */
+export async function discoverCustomSkills(): Promise<LoadedSkill[]> {
+  const dirs = getCustomSkillDirectories()
+  if (dirs.length === 0) return []
+  const results = await Promise.all(
+    dirs.map((dir) => loadSkillsFromDir(dir, "custom").catch(() => []))
+  )
+  return results.flat()
+}
+
 export async function discoverOpencodeGlobalSkills(): Promise<LoadedSkill[]> {
   const configDir = getOpenCodeConfigDir({ binary: "opencode" })
   const opencodeSkillsDir = join(configDir, "skills")
   const baseSkills = await loadSkillsFromDir(opencodeSkillsDir, "opencode")
   const marketDir = getMarketSkillsDir()
   const marketSkills = await loadSkillsFromDir(marketDir, "opencode")
-  return [...baseSkills, ...marketSkills]
+  const customSkills = await discoverCustomSkills()
+  return [...baseSkills, ...marketSkills, ...customSkills]
 }
 
 export async function discoverOpencodeProjectSkills(): Promise<LoadedSkill[]> {

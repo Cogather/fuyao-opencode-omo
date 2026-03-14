@@ -417,4 +417,84 @@ description: Skill from market dir
       }
     })
   })
+
+  describe("skill_directories - 自定义目录识别与加载", () => {
+    it("配置 skill_directories 后，该目录下 skill 被扫描且 scope 为 custom", async () => {
+      const testRoot = join(tmpdir(), "skill-loader-custom-dirs-" + Date.now())
+      const configDir = join(testRoot, "config")
+      const customSkillsDir = join(testRoot, "custom-skills")
+      const skillSubDir = join(customSkillsDir, "my-custom-skill")
+      mkdirSync(configDir, { recursive: true })
+      mkdirSync(skillSubDir, { recursive: true })
+      writeFileSync(
+        join(configDir, "fuyao-opencode.json"),
+        JSON.stringify({ skill_directories: [customSkillsDir] }, null, 2)
+      )
+      writeFileSync(
+        join(skillSubDir, "SKILL.md"),
+        `---
+name: my-custom-skill
+description: Skill from custom directory
+---
+# my-custom-skill
+`
+      )
+      const originalEnv = process.env.OPENCODE_CONFIG_DIR
+      const originalCwd = process.cwd()
+      process.env.OPENCODE_CONFIG_DIR = configDir
+      process.chdir(testRoot)
+      try {
+        const { discoverOpencodeGlobalSkills, discoverCustomSkills } = await import("./loader")
+        const customOnly = await discoverCustomSkills()
+        expect(customOnly).toHaveLength(1)
+        expect(customOnly[0].name).toBe("my-custom-skill")
+        expect(customOnly[0].scope).toBe("custom")
+
+        const globalSkills = await discoverOpencodeGlobalSkills()
+        const found = globalSkills.find((s) => s.name === "my-custom-skill")
+        expect(found).toBeDefined()
+        expect(found!.scope).toBe("custom")
+      } finally {
+        process.env.OPENCODE_CONFIG_DIR = originalEnv
+        process.chdir(originalCwd)
+        rmSync(testRoot, { recursive: true, force: true })
+      }
+    })
+
+    it("skill_directories 为相对路径时，相对于 cwd 解析", async () => {
+      const testRoot = join(tmpdir(), "skill-loader-custom-rel-" + Date.now())
+      const configDir = join(testRoot, "config")
+      const customSkillsDir = join(testRoot, "my-skills")
+      const skillSubDir = join(customSkillsDir, "rel-skill")
+      mkdirSync(configDir, { recursive: true })
+      mkdirSync(skillSubDir, { recursive: true })
+      writeFileSync(
+        join(configDir, "fuyao-opencode.json"),
+        JSON.stringify({ skill_directories: ["./my-skills"] }, null, 2)
+      )
+      writeFileSync(
+        join(skillSubDir, "SKILL.md"),
+        `---
+name: rel-skill
+description: Relative path skill
+---
+# rel-skill
+`
+      )
+      const originalEnv = process.env.OPENCODE_CONFIG_DIR
+      const originalCwd = process.cwd()
+      process.env.OPENCODE_CONFIG_DIR = configDir
+      process.chdir(testRoot)
+      try {
+        const { discoverCustomSkills } = await import("./loader")
+        const skills = await discoverCustomSkills()
+        expect(skills).toHaveLength(1)
+        expect(skills[0].name).toBe("rel-skill")
+      } finally {
+        process.env.OPENCODE_CONFIG_DIR = originalEnv
+        process.chdir(originalCwd)
+        rmSync(testRoot, { recursive: true, force: true })
+      }
+    })
+  })
 })

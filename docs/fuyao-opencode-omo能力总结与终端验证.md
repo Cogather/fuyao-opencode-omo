@@ -54,12 +54,14 @@
 | **Skill 市场列表/下载** | 获取市场 skill 列表（当前 Mock）、按 id 下载到 `configDir/skills/market/<skillId>/`。 |
 | **skill_inject_to_agent** | 将指定市场 skill 注入到某 agent 的 skills 配置并写回 OMO 配置；agent 可为内置（如 sisyphus）或平台（如 fuyao:CodeHelper）。 |
 | **市场 skill 被发现** | `discoverOpencodeGlobalSkills` 会扫描 `skills/market` 下子目录，市场 skill 进入 config.command 供 agent 使用。 |
+| **自定义 Skill 目录** | 配置 `skill_directories: ["路径1", "路径2"]` 后，这些目录会被扫描（一层子目录，SKILL.md 或 {name}.md）；路径相对 cwd 解析，scope 为 custom，与现有 5 类目录一并参与发现与可用列表。 |
 
 ### 6. 配置与安装
 
 | 能力 | 说明 |
 |------|------|
 | **platform_agent / default_agent 配置** | Schema 支持 `platform_agent: { enabled, platforms }`、`default_agent`；install 时默认写入。 |
+| **skill_directories 配置** | 可选 `skill_directories: string[]`，额外扫描的 skill 根目录；相对路径相对于当前工作目录解析。 |
 | **writeOmoConfig 增量合并** | 已存在配置文件时，新写入与已有配置 deepMerge，已有项优先，仅补充缺失。 |
 
 ---
