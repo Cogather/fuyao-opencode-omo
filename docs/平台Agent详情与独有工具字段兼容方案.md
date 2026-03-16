@@ -33,8 +33,8 @@
 ### 1.2 当前数据模型（PlatformAgentApp）与转化链路
 
 - **类型**：`src/features/platform-agent/types.ts` 中 `PlatformAgentApp`  
-  - 已有：id、name、version、prompt、model、permission、skills、mcps、subagents、skill_definitions、mcp_definitions、mode、description、**managers**（字符串数组）、tool_set、agent_tool_set、workflow_tool_set 等。  
-  - managers 用于发布权限：配置项 `platform_agent.publish_identity` 与 app.managers 比对，仅名单内用户可执行发布。
+  - 已有：id、name、version、prompt、model、permission、skills、mcps、subagents、skill_definitions、mcp_definitions、mode、description、**managers**（JSON 数组，每项 { userId, name }）、tool_set、agent_tool_set、workflow_tool_set 等。  
+  - managers 用于发布权限：配置项 `platform_agent.publish_identity`（用户工号）与 app.managers 中各项的 **userId** 比对，仅当一致时可执行发布。
 - **转化**：`config-bridge.ts` 的 `platformAppToOpenCodeAgent` 只处理上述已有字段；config-handler 将 `skill_definitions` / `mcp_definitions` 合并进 config.command / config.mcp，**未处理**平台独有工具。
 
 因此：**常规项**可通过扩展「详情 API → PlatformAgentApp」的映射（mcpToolSet→mcp_definitions、skillSet→skill_definitions/下载、agentSet→subagents）在现有架构下完成配置转化；**独有工具**需要新增类型、存储与**调用路径**才能被 OpenCode 内运行的平台 Agent 使用。

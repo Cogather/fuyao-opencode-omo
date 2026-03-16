@@ -22,7 +22,7 @@
 | **平台下发的 skill/MCP 定义合并** | 平台应用可带 `skill_definitions`、`mcp_definitions`；拉取时自动合并进 `config.command`、`config.mcp`，无需本地或市场已有同名项即可使用（Mock 中 CodeHelper 等已带示例）。 |
 | **平台 Agent 与主/子 Agent 一致使用** | 平台 Agent 以 `fuyao:CodeHelper`、`agentcenter:Reviewer` 等形式出现在 Agent 列表，可与内置 Agent 一样被选中、发消息、使用 skill/MCP。 |
 | **用户覆盖** | 在配置 `agents` 中手写 `fuyao:CodeHelper` 等 key，可覆盖平台拉取的 prompt、skills、mcps、subagents。 |
-| **发布到平台** | 将当前本地配置（含 prompt、skills、mcps、subagents）发布/更新到平台（当前 Mock 成功）。平台应用详情可含 **managers**（管理员名单）；配置 **platform_agent.publish_identity** 为当前用户身份后，仅名单内人员可发布，其他人可本地修改但不能发布。 |
+| **发布到平台** | 将当前本地配置（含 prompt、skills、mcps、subagents）发布/更新到平台（当前 Mock 成功）。平台应用详情可含 **managers**（JSON 数组，每项为对象：userId 用户工号、name 用户中文名）；配置 **platform_agent.publish_identity** 为当前用户工号后，仅当工号与 managers 中某一项 userId 一致时可发布，其他人可本地修改但不能发布。 |
 | **同步与版本比对** | 拉取平台列表与本地 version-cache 比对，支持 force_refresh 覆盖缓存；有更新时通过 Toast 或同步返回文案提示。 |
 | **Subagent 白名单** | 平台 Agent 可配置 subagents；delegate_task 仅能调用该白名单内的 agent，实现 A→B→C 多层调用。 |
 | **平台独有工具（toolSet/agentToolSet/workflowToolSet）** | 平台应用详情可带 tool_set、agent_tool_set、workflow_tool_set；拉取后写入 platform-tool-registry。平台 Agent 可调用 **platform_list_tools** 查看可用 toolId 与描述，再通过 **platform_invoke_tool** 传入 tool_id、tool_type、arguments 执行；非平台 Agent 不可见上述两工具。适配器 invokeTool 当前为 Mock。 |
@@ -61,9 +61,55 @@
 
 | 能力 | 说明 |
 |------|------|
-| **platform_agent / default_agent 配置** | Schema 支持 `platform_agent: { enabled, platforms, publish_identity? }`、`default_agent`；install 时默认写入。`publish_identity` 为当前用户身份（如平台用户 id 或邮箱），用于与应用详情中的 **managers** 比对：仅管理员名单内用户可执行发布。 |
+| **platform_agent / default_agent 配置** | Schema 支持 `platform_agent: { enabled, platforms, publish_identity? }`、`default_agent`；install 时默认写入。`publish_identity` 为当前**用户工号**，用于与应用详情中的 **managers**（每项含 userId、name）比对：仅当与某一项 userId 一致时可执行发布。**说明**：当前 **无法从 OpenCode 获取已登录用户信息**（插件入参仅有 client、project、directory 等，无 user/account 接口），故 `publish_identity` 需用户在配置中**手动填写**；若 OpenCode 后续提供当前用户/登录身份 API，插件可扩展为自动读取或建议该值。 |
 | **skill_directories 配置** | 可选 `skill_directories: string[]`，额外扫描的 skill 根目录；相对路径相对于当前工作目录解析。 |
 | **writeOmoConfig 增量合并** | 已存在配置文件时，新写入与已有配置 deepMerge，已有项优先，仅补充缺失。 |
+
+#### publish_identity 手动配置（发布权限）
+
+当需要**发布**平台 Agent（如执行 /platform-publish 或 `platform_agent_publish`）且该应用在平台侧配置了 **managers**（管理员名单，JSON 数组，每项为对象：**userId** 用户工号、**name** 用户中文名）时，必须在本地配置中填写 **publish_identity**（当前用户工号），且取值需与 managers 中某一项的 **userId** **完全一致**，否则发布会被拒绝。
+
+**配置步骤：**
+
+1. **确认配置文件**  
+   使用 OMO 插件专用配置：**`fuyao-opencode.json`** 或 **`fuyao-opencode.jsonc`**（不是 `opencode.jsonc`）。
+
+2. **配置文件位置（二选一）**  
+   - **用户级**：与 `opencode.jsonc` 同目录。即 OpenCode 配置目录下的 `fuyao-opencode.json` 或 `fuyao-opencode.jsonc`。  
+     - Windows：常见为 `%USERPROFILE%\.config\opencode\` 或 `%APPDATA%\opencode\`（以本机实际存在的 `opencode.json`/`opencode.jsonc` 所在目录为准）。  
+     - macOS/Linux：常见为 `~/.config/opencode/`。  
+   - **项目级**：当前项目根目录下的 **`.opencode/fuyao-opencode.json`** 或 **`.opencode/fuyao-opencode.jsonc`**。  
+   用户级与项目级会合并，项目级覆盖用户级同名字段。
+
+3. **配置键与取值**  
+   - 在配置根对象下增加或修改 **`platform_agent`**，在其中设置 **`publish_identity`** 为**字符串**。  
+   - 取值需与平台该应用详情中的 **managers** 列表中的某一项**完全一致**（区分大小写、无多余空格）。常见为平台用户 id、邮箱等，以平台实际返回的 managers 为准。
+
+4. **配置示例**  
+   - 若文件已有 `platform_agent`，仅补全 `publish_identity`：
+     ```json
+     {
+       "platform_agent": {
+         "enabled": true,
+         "platforms": ["fuyao", "agentcenter"],
+         "publish_identity": "10001"
+       }
+     }
+     ```
+   - 若文件为空或仅有其他键，可只写：
+     ```json
+     {
+       "platform_agent": {
+         "publish_identity": "你的用户工号"
+       }
+     }
+     ```
+   使用 **.jsonc** 时可在键值后加注释，例如：`"publish_identity": "alice@example.com" // 与平台 managers 中一致`。
+
+5. **保存并生效**  
+   保存配置文件后，**重启 OpenCode** 或重新加载配置后，再执行发布；发布时插件会读取 `platform_agent.publish_identity` 与平台应用的 managers 比对，仅在名单内时允许发布。
+
+**说明**：若应用**没有**配置 managers（或 managers 为空），可不配置 publish_identity，所有人均可发布；一旦应用有非空 managers，则必须配置 publish_identity 且其值与某一项 **userId** 一致才能发布。
 
 ### 7. OpenCode 原生 Agent 保留
 
@@ -134,7 +180,7 @@
   或按命令提示传入 agent_name，例如在后续对话中让 Agent 使用 tool 时填 `agent_name: "fuyao:CodeHelper"`。
 - **预期**：Agent 调用 `platform_agent_publish`，返回发布成功相关文案（当前 Mock 成功）；本地 version-cache 中该 name 的 version 会更新。
 - **错误验证**：若传入非 platform:name（如 `sisyphus`），应返回要求使用 `fuyao:Name` 或 `agentcenter:Name` 的 Error 文案。
-- **managers 校验**：若该应用配置了 **managers**（管理员名单），须在配置中设置 `platform_agent.publish_identity` 为当前用户身份（如 `alice@example.com`），且该身份在 managers 名单内才能发布；未配置 publish_identity 或身份不在名单内会返回明确错误（可本地修改，但不能发布）。
+- **managers 校验**：若该应用配置了 **managers**（管理员名单），须在 **fuyao-opencode.json(c)** 中按「publish_identity 手动配置」填写 `platform_agent.publish_identity`（与 managers 中某一项完全一致），才能发布；未配置或不在名单内会返回明确错误（可本地修改，但不能发布）。
 
 ### 6. 验证「子 Agent 与 delegate_task」
 
@@ -210,7 +256,7 @@
 |--------|------------------|
 | 原生 build/plan 保留 | 安装插件并重启 OpenCode 后，在 Agent 下拉中直接查看是否仍有 build、plan。保留原生 plan 时在 **fuyao-opencode.json(c)**（配置目录或项目 `.opencode/` 下）中设置 `sisyphus_agent.replace_plan: false`，保存后重启 |
 | 平台 Agent 列表可见 | `platform_agent: { enabled: true, platforms: ["fuyao"] }` 或含 agentcenter |
-| 平台同步/发布 | 同上；sync 的 platform_type 需在 platforms 内；有 managers 的应用发布前需配置 publish_identity 且在名单内 |
+| 平台同步/发布 | 同上；sync 的 platform_type 需在 platforms 内；有 managers 的应用发布前需配置 **publish_identity**（用户工号，见上文「publish_identity 手动配置」）且与 managers 中某一项 userId 一致 |
 | 默认 Agent 持久化 | 主会话 + 用户发消息即可；无需额外配置 |
 | Skill 注入 | 配置目录可写；skill 市场当前 Mock，id 见 mock-data |
 | 子 Agent / delegate | 使用的 Agent 在 config 中配置了 subagents（或平台拉取带 subagents） |

@@ -1,6 +1,7 @@
 export type {
   PlatformType,
   PlatformAgentApp,
+  PlatformAgentManager,
   IPlatformAdapter,
   GetAgentListOptions,
   PlatformToolItem,

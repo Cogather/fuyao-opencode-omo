@@ -406,9 +406,9 @@ export const PlatformAgentConfigSchema = z.object({
   /** Which platforms to fetch: fuyao, agentcenter, or both. */
   platforms: z.array(z.enum(["fuyao", "agentcenter"])).optional(),
   /**
-   * Current user identity for publish permission check (e.g. platform user id or email).
-   * When an agent app has a non-empty managers list, only identities in that list can publish;
-   * if publish_identity is unset or not in managers, publish is rejected.
+   * Current user's 用户工号 for publish permission check. When an agent app has a non-empty managers list
+   * (each item: { userId, name }), only when publish_identity matches one manager's userId can publish;
+   * if unset or not in managers, publish is rejected.
    */
   publish_identity: z.string().optional(),
 })

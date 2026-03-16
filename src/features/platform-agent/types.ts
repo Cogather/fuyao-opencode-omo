@@ -37,10 +37,16 @@ export interface PlatformAgentApp {
   agent_tool_set?: PlatformToolItem[]
   workflow_tool_set?: PlatformToolItem[]
   /**
-   * Platform user ids (or identifiers) who have admin rights to this agent app.
-   * Only users in this list can publish changes to the platform; others can edit locally but cannot publish.
+   * List of admins who can publish this agent app to the platform.
+   * Each item has userId (用户工号) and name (用户中文名). Only users whose publish_identity matches one manager's userId can publish.
    */
-  managers?: string[]
+  managers?: PlatformAgentManager[]
+}
+
+/** Single manager entry in PlatformAgentApp.managers (userId: 用户工号, name: 用户中文名). */
+export interface PlatformAgentManager {
+  userId: string
+  name: string
 }
 
 /** Single item in toolSet / agentToolSet / workflowToolSet (platform API shape). */

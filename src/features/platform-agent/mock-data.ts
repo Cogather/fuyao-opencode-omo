@@ -51,7 +51,11 @@ export const MOCK_FUYAO_AGENTS: PlatformAgentApp[] = [
     workflow_tool_set: [
       { toolId: "fuyao-pipeline-validate", description: "Validate code pipeline (mock)." },
     ],
-    managers: ["alice@example.com", "bob"],
+    managers: [
+      { userId: "alice@example.com", name: "张三" },
+      { userId: "10002", name: "李四" },
+      { userId: "bob", name: "Bob" },
+    ],
   },
   {
     id: "fuyao-doc-agent",
@@ -115,7 +119,7 @@ export const MOCK_AGENTCENTER_AGENTS: PlatformAgentApp[] = [
     tool_set: [
       { toolId: "ac-review-suggest", description: "Code review suggestion tool (mock)." },
     ],
-    managers: ["admin@agentcenter.local"],
+    managers: [{ userId: "admin@agentcenter.local", name: "平台管理员" }],
   },
   {
     id: "ac-qa",
